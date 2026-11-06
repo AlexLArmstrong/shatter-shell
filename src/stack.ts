@@ -113,7 +113,7 @@ const TabButton = GObject.registerClass(
 
             const container = (this._inner = new St.BoxLayout({
                 y_expand: true,
-                y_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.FILL,
                 style_class: 'shatter-shell-tab-inner',
             }));
             container.add_child(icon);
@@ -123,7 +123,7 @@ const TabButton = GObject.registerClass(
             super._init({
                 x_expand: true,
                 y_expand: true,
-                y_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.FILL,
                 toggle_mode: true,
                 child: container,
                 accessible_role: Atk.Role.PAGE_TAB,

@@ -67,6 +67,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Changing the tab bar height and gap in the preferences, or the corner radii and tab margins with gsettings, updates existing stacks immediately.
 - [ ] Changing the size unit with gsettings resizes the gaps and the tab bars immediately.
 - [ ] By default, the tab bar's corners match those of libadwaita windows (15 pixels), and the tabs' corners are 12 pixels, whatever the size unit.
+- [ ] With no top and bottom margin, tabs fill the height of the tab bar. With a margin, they're centered.
 - [ ] The space between two tabs is the same as the space at either end of the tab bar.
 - [ ] Lock and unlock the screen-- stacks should still exist and windows should not have moved.
 - [ ] Full-screen an application within the stack, then quit the application-- the remaining tabs should be visible.
