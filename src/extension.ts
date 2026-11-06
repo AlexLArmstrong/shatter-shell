@@ -1598,6 +1598,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         this.set_gap_inner(this.settings.get_gap_inner());
                         this.set_gap_outer(this.settings.get_gap_outer());
                         if (this.auto_tiler) {
+                            for (const stack of this.auto_tiler.forest.stacks.values()) stack.update_style();
                             this.retile_work_areas();
                         } else {
                             this.update_snapped();
@@ -1612,6 +1613,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         }
                         break;
                     case 'tab-bar-border-radius':
+                    case 'tab-margin-horizontal':
                     case 'tab-border-radius':
                         if (this.auto_tiler) {
                             for (const stack of this.auto_tiler.forest.stacks.values()) stack.update_style();

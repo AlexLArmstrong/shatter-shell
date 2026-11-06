@@ -54,6 +54,12 @@
             <summary>Corner radius of a tab, in pixels</summary>
         </key>
 
+        <key type="u" name="tab-margin-horizontal">
+            <default>1</default>
+            <range min="0" max="8"/>
+            <summary>Space left and right of each tab, and between tabs, in size units</summary>
+        </key>
+
         <key type="b" name="mouse-cursor-follows-active-window">
             <default>false</default>
             <summary>Move cursor to active window when navigating with keyboard shortcuts or touchpad gestures</summary>

@@ -66,6 +66,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Only the tab bar of the stack with the focused window looks focused.
 - [ ] Changing the size unit with gsettings resizes the gaps and the tab bars immediately.
 - [ ] By default, the tab bar's corners match those of libadwaita windows (15 pixels), and the tabs' corners are 12 pixels, whatever the size unit.
+- [ ] The space between two tabs is the same as the space at either end of the tab bar.
 - [ ] Lock and unlock the screen-- stacks should still exist and windows should not have moved.
 - [ ] Full-screen an application within the stack, then quit the application-- the remaining tabs should be visible.
 

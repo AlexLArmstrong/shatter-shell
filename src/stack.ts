@@ -31,7 +31,12 @@ function get_tab_separation(ext: Ext): number {
 
 /** The tab bar's inline style. St already applies the display scale to style pixels. */
 function get_tab_bar_style(settings: Settings.ExtensionSettings): string {
-    return `border-radius: ${settings.get_tab_bar_border_radius()}px;`;
+    const horizontal = settings.get_tab_margin_horizontal() * settings.get_size_unit();
+
+    // Spacing between tabs matches the margin at either end, rather than adding up to twice that
+    let style = `border-radius: ${settings.get_tab_bar_border_radius()}px;`;
+    style += ` padding: 0 ${horizontal}px; spacing: ${horizontal}px;`;
+    return style;
 }
 
 /** Space a stack reserves above its windows: the tab bar plus the gap below it. */
