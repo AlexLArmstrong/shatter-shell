@@ -36,6 +36,12 @@
             <summary>Gap between a stack's tab bar and its window, in size units</summary>
         </key>
 
+        <key type="u" name="tab-bar-border-radius">
+            <default>15</default>
+            <range min="0" max="30"/>
+            <summary>Corner radius of a stack's tab bar, in pixels. The default matches libadwaita's windows.</summary>
+        </key>
+
         <key type="u" name="tab-bar-height">
             <default>12</default>
             <range min="6" max="20"/>

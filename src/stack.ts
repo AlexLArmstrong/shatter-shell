@@ -29,6 +29,11 @@ function get_tab_separation(ext: Ext): number {
     return ext.settings.get_tab_bar_gap() * ext.settings.get_size_unit() * ext.dpi;
 }
 
+/** The tab bar's inline style. St already applies the display scale to style pixels. */
+function get_tab_bar_style(settings: Settings.ExtensionSettings): string {
+    return `border-radius: ${settings.get_tab_bar_border_radius()}px;`;
+}
+
 /** Space a stack reserves above its windows: the tab bar plus the gap below it. */
 export function get_tab_height(ext: Ext): number {
     return ext.settings.get_tab_bar_height() * ext.settings.get_size_unit() * ext.dpi + get_tab_separation(ext);
@@ -45,9 +50,10 @@ interface StackWidgets {
     tabs: St.Widget;
 }
 
-function stack_widgets_new(): StackWidgets {
+function stack_widgets_new(style: string): StackWidgets {
     const tabs = new St.BoxLayout({
         style_class: 'shatter-shell-stack',
+        style,
         x_expand: true,
         accessible_role: Atk.Role.PAGE_TAB_LIST,
     });
@@ -191,7 +197,7 @@ export class Stack {
         this.tab_height = get_tab_height(this.ext);
         this.tab_separation = get_tab_separation(this.ext);
 
-        this.widgets = stack_widgets_new();
+        this.widgets = stack_widgets_new(get_tab_bar_style(this.ext.settings));
 
         global.window_group.add_child(this.widgets.tabs);
 
@@ -460,7 +466,7 @@ export class Stack {
     recreate_widgets() {
         if (this.widgets !== null) {
             this.widgets.tabs.disconnect(this.tabs_destroy);
-            this.widgets = stack_widgets_new();
+            this.widgets = stack_widgets_new(get_tab_bar_style(this.ext.settings));
 
             global.window_group.add_child(this.widgets.tabs);
 
@@ -576,6 +582,13 @@ export class Stack {
         } else {
             this.widgets.tabs.hide();
         }
+    }
+
+    /** Applies the current tab bar settings to the stack's actors */
+    update_style() {
+        if (!this.widgets) return;
+
+        this.widgets.tabs.set_style(get_tab_bar_style(this.ext.settings));
     }
 
     /** Updates the dimensions and positions of the stack's actors */

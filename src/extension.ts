@@ -1611,6 +1611,11 @@ export class Ext extends Ecs.System<ExtEvent> {
                             this.show_border_on_focused();
                         }
                         break;
+                    case 'tab-bar-border-radius':
+                        if (this.auto_tiler) {
+                            for (const stack of this.auto_tiler.forest.stacks.values()) stack.update_style();
+                        }
+                        break;
                 }
             }),
         );

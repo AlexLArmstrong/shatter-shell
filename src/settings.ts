@@ -68,6 +68,9 @@ export class ExtensionSettings {
     get_tab_bar_gap() { return this.ext.get_uint('tab-bar-gap'); }
     set_tab_bar_gap(value: number) { this.ext.set_uint('tab-bar-gap', value); }
 
+    get_tab_bar_border_radius() { return this.ext.get_uint('tab-bar-border-radius'); }
+    set_tab_bar_border_radius(value: number) { this.ext.set_uint('tab-bar-border-radius', value); }
+
     get_tab_bar_height() { return this.ext.get_uint('tab-bar-height'); }
     set_tab_bar_height(value: number) { this.ext.set_uint('tab-bar-height', value); }
 
