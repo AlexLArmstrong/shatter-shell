@@ -1605,6 +1605,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         this.show_border_on_focused();
                         break;
                     case 'tab-bar-gap':
+                    case 'tab-bar-height':
                         if (this.auto_tiler) {
                             this.update_inner_gap();
                             this.show_border_on_focused();

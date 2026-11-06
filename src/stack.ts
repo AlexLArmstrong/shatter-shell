@@ -22,9 +22,6 @@ enum TabActive {
     urgent,
 }
 
-/** Height of the tab bar itself, excluding the gap between it and the window. */
-const TAB_BAR_HEIGHT_UNSCALED = 40 as const;
-
 const TAB_ICON_SIZE = 17 as const;
 
 /** Space between the tab bar and the window. */
@@ -34,7 +31,7 @@ function get_tab_separation(ext: Ext): number {
 
 /** Space a stack reserves above its windows: the tab bar plus the gap below it. */
 export function get_tab_height(ext: Ext): number {
-    return TAB_BAR_HEIGHT_UNSCALED * ext.dpi + get_tab_separation(ext);
+    return ext.settings.get_tab_bar_height() * ext.settings.get_size_unit() * ext.dpi + get_tab_separation(ext);
 }
 
 interface Tab {

@@ -8,6 +8,29 @@ import * as focus from './focus.js';
 import { LogLevel } from './log_level.js';
 import * as settings from './settings.js';
 
+function unit_row(
+    title: string,
+    subtitle: string,
+    lower: number,
+    upper: number,
+    value: number,
+    set_value: (value: number) => void,
+) {
+    const row = new Adw.SpinRow({
+        title,
+        subtitle,
+        adjustment: new Gtk.Adjustment({ lower, upper, value, step_increment: 1, page_increment: 1 }),
+        numeric: true,
+        digits: 0,
+        snap_to_ticks: true,
+    });
+    row.connect('notify::value', row => {
+        set_value(row.value);
+        Settings.sync();
+    });
+    return row;
+}
+
 export default class ShatterShellPreferences extends ExtensionPreferences {
     override fillPreferencesWindow(window: Adw.PreferencesWindow) {
         const ext = new settings.ExtensionSettings();
@@ -182,6 +205,20 @@ export default class ShatterShellPreferences extends ExtensionPreferences {
                 });
                 group.add(row);
             }
+        }
+
+        {
+            const group = new Adw.PreferencesGroup({
+                title: 'Tab bar',
+                description: 'Sizes are in size units, like the gaps',
+            });
+            page.add(group);
+
+            group.add(
+                unit_row('Height', 'Height of the tab bar', 6, 20, ext.get_tab_bar_height(), value =>
+                    ext.set_tab_bar_height(value),
+                ),
+            );
         }
 
         {

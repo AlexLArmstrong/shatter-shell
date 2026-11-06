@@ -36,6 +36,12 @@
             <summary>Gap between a stack's tab bar and its window, in size units</summary>
         </key>
 
+        <key type="u" name="tab-bar-height">
+            <default>12</default>
+            <range min="6" max="20"/>
+            <summary>Height of a stack's tab bar, in size units</summary>
+        </key>
+
         <key type="b" name="mouse-cursor-follows-active-window">
             <default>false</default>
             <summary>Move cursor to active window when navigating with keyboard shortcuts or touchpad gestures</summary>
