@@ -1,13 +1,18 @@
 @use 'sass:color';
 
 // Adwaita colors from https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/css-variables.html
-$headerbar-bg-color: #ffffff !default;
+$window-bg-color: #fafafb !default;
 $headerbar-fg-color: rgb(0 0 6 / 80%) !default;
 $headerbar-shade-color: rgb(0 0 6 / 12%) !default;
 $warning-bg-color: #e5a50a !default;
 $warning-fg-color: rgb(0 0 0 / 80%) !default;
 
 $active-tab-bg-color: rgba(0, 0, 0, 0.09) !default;
+
+// libadwaita tints its tabs with a share of the text color
+@function tab-tint($share) {
+    @return color.change($headerbar-fg-color, $alpha: color.alpha($headerbar-fg-color) * $share);
+}
 
 .shatter-shell-active-hint {
     border-style: solid;
@@ -42,21 +47,22 @@ $active-tab-bg-color: rgba(0, 0, 0, 0.09) !default;
     padding-bottom: 6px;
 }
 
+// Apps' header bars are transparent in libadwaita's toolbar views, which shows the window's background
 .shatter-shell-stack {
-    background: $headerbar-bg-color;
+    background: $window-bg-color;
     color: $headerbar-fg-color;
 }
 
 .shatter-shell-tab:hover .shatter-shell-tab-inner {
-    background: color.scale($active-tab-bg-color, $alpha: -50%);
+    background: tab-tint(0.07);
 }
 
 .shatter-shell-tab:checked .shatter-shell-tab-inner {
-    background: $active-tab-bg-color;
+    background: tab-tint(0.1);
 }
 
 .shatter-shell-tab:checked:hover .shatter-shell-tab-inner {
-    background: color.scale($active-tab-bg-color, $alpha: +2%);
+    background: tab-tint(0.13);
 }
 
 .shatter-shell-tab.shatter-shell-tab-urgent .shatter-shell-tab-inner {
