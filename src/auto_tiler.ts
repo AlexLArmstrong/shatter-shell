@@ -332,6 +332,8 @@ export class AutoTiler {
      * returns to once it's untiled.
      */
     detach_window(ext: Ext, win: Entity, untiling: boolean = true) {
+        const stack = this.find_stack(win)?.[1].inner;
+
         const prev_fork = this.attached.get(win);
         if (prev_fork) {
             const reflow_fork = this.forest.detach(ext, prev_fork, win, untiling);
@@ -347,6 +349,18 @@ export class AutoTiler {
                 this.tile(ext, fork, fork.area);
             }
         }
+
+        if (stack) this.dissolve_single_stack(ext, stack);
+    }
+
+    /** Takes the tabs from a stack once only one window is left in it, leaving a plain window */
+    dissolve_single_stack(ext: Ext, stack: node.NodeStack) {
+        if (!stack.tabbed || stack.entities.length !== 1) return;
+
+        const entity = stack.entities[0]!;
+        const fork = this.get_parent_fork(entity);
+        const window = ext.windows.get(entity);
+        if (fork && window) this.unstack(ext, fork, window);
     }
 
     /** Swaps the location of two windows if the dropped window was dropped onto its sibling */
