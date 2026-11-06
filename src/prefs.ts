@@ -149,6 +149,28 @@ export default class ShatterShellPreferences extends ExtensionPreferences {
             }
 
             {
+                const row = new Adw.SpinRow({
+                    title: 'Tab bar gap',
+                    subtitle: 'Gap between a tab bar and its window',
+                    adjustment: new Gtk.Adjustment({
+                        lower: 0,
+                        upper: 99,
+                        value: ext.get_tab_bar_gap(),
+                        step_increment: 1,
+                        page_increment: 4,
+                    }),
+                    numeric: true,
+                    digits: 0,
+                    snap_to_ticks: true,
+                });
+                row.connect('notify::value', row => {
+                    ext.set_tab_bar_gap(row.value);
+                    Settings.sync();
+                });
+                group.add(row);
+            }
+
+            {
                 const row = new Adw.SwitchRow({
                     title: 'Smart gaps',
                     subtitle: 'Remove outer gap when only one window',

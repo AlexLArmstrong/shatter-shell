@@ -65,6 +65,9 @@ export class ExtensionSettings {
     get_size_unit() { return this.ext.get_uint('size-unit'); }
     set_size_unit(value: number) { this.ext.set_uint('size-unit', value); }
 
+    get_tab_bar_gap() { return this.ext.get_uint('tab-bar-gap'); }
+    set_tab_bar_gap(value: number) { this.ext.set_uint('tab-bar-gap', value); }
+
     get_tile_by_default() { return this.ext.get_boolean('tile-by-default'); }
     set_tile_by_default(value: boolean) { this.ext.set_boolean('tile-by-default', value); }
 

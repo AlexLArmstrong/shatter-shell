@@ -30,6 +30,12 @@
             <summary>Gap surrounding tiled windows, in size units</summary>
         </key>
 
+        <key type="u" name="tab-bar-gap">
+            <default>1</default>
+            <range min="0" max="99"/>
+            <summary>Gap between a stack's tab bar and its window, in size units</summary>
+        </key>
+
         <key type="b" name="mouse-cursor-follows-active-window">
             <default>false</default>
             <summary>Move cursor to active window when navigating with keyboard shortcuts or touchpad gestures</summary>

@@ -1100,7 +1100,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         if (movement === Movement.NONE) return;
 
                         if (win.stack != null) {
-                            const tab_dimension = this.dpi * stack.TAB_HEIGHT_UNSCALED;
+                            const tab_dimension = stack.get_tab_height(this);
                             crect.height += tab_dimension;
                             crect.y -= tab_dimension;
                         }
@@ -1603,6 +1603,12 @@ export class Ext extends Ecs.System<ExtEvent> {
                             this.update_snapped();
                         }
                         this.show_border_on_focused();
+                        break;
+                    case 'tab-bar-gap':
+                        if (this.auto_tiler) {
+                            this.update_inner_gap();
+                            this.show_border_on_focused();
+                        }
                         break;
                 }
             }),

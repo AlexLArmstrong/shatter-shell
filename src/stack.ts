@@ -22,10 +22,20 @@ enum TabActive {
     urgent,
 }
 
-export const TAB_HEIGHT_UNSCALED = 43 as const;
+/** Height of the tab bar itself, excluding the gap between it and the window. */
+const TAB_BAR_HEIGHT_UNSCALED = 40 as const;
 
-/** Space between the tab bar and the window. This is already included in {@link TAB_HEIGHT_UNSCALED}. */
-const TAB_SEPARATION_UNSCALED = 3 as const;
+const TAB_ICON_SIZE = 17 as const;
+
+/** Space between the tab bar and the window. */
+function get_tab_separation(ext: Ext): number {
+    return ext.settings.get_tab_bar_gap() * ext.settings.get_size_unit() * ext.dpi;
+}
+
+/** Space a stack reserves above its windows: the tab bar plus the gap below it. */
+export function get_tab_height(ext: Ext): number {
+    return TAB_BAR_HEIGHT_UNSCALED * ext.dpi + get_tab_separation(ext);
+}
 
 interface Tab {
     entity: Entity;
@@ -61,7 +71,7 @@ const TabButton = GObject.registerClass(
         override _init(window: ShellWindow, settings: Settings.ExtensionSettings) {
             this._settings = settings;
 
-            const icon = window.icon(Math.floor(TAB_HEIGHT_UNSCALED * 0.4));
+            const icon = window.icon(TAB_ICON_SIZE);
             icon.set_x_align(Clutter.ActorAlign.START);
             icon.set_style('padding: 4px; margin-left: 4px;');
 
@@ -77,7 +87,7 @@ const TabButton = GObject.registerClass(
             const close_button = new St.Button({
                 child: new St.Icon({
                     icon_name: 'window-close-symbolic',
-                    icon_size: Math.floor(TAB_HEIGHT_UNSCALED * 0.4),
+                    icon_size: TAB_ICON_SIZE,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
                 y_expand: true,
@@ -181,8 +191,8 @@ export class Stack {
     constructor(ext: Ext, node: NodeStack) {
         this.ext = ext;
         this.node = node;
-        this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.dpi;
-        this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.dpi;
+        this.tab_height = get_tab_height(this.ext);
+        this.tab_separation = get_tab_separation(this.ext);
 
         this.widgets = stack_widgets_new();
 
@@ -577,8 +587,8 @@ export class Stack {
 
         this.rect = rect;
 
-        this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.dpi;
-        this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.dpi;
+        this.tab_height = get_tab_height(this.ext);
+        this.tab_separation = get_tab_separation(this.ext);
 
         this.stack_rect = new Mtk.Rectangle({
             x: rect.x,

@@ -6,7 +6,7 @@ import type { Forest } from './forest.js';
 import type { Fork } from './fork.js';
 
 import * as Ecs from './ecs.js';
-import { TAB_HEIGHT_UNSCALED } from './stack.js';
+import { get_tab_height } from './stack.js';
 
 /**
  * A node is either a fork, or a stack of windows, which is every leaf of the tree. A window on its own
@@ -262,7 +262,7 @@ export class Node<T extends NodeADT = NodeADT> {
                 // Only a tabbed leaf leaves room for its tab bar
                 this.inner.rect = area.copy();
                 if (this.inner.tabbed) {
-                    const tab_height = ext.dpi * TAB_HEIGHT_UNSCALED;
+                    const tab_height = get_tab_height(ext);
                     this.inner.rect.y += tab_height;
                     this.inner.rect.height -= tab_height;
                 }
