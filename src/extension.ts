@@ -2200,7 +2200,8 @@ export class Ext extends Ecs.System<ExtEvent> {
                         }
 
                         if (migration) {
-                            mark_for_reassignment(this, migration[0].entity);
+                            // Only moving trees give up their workspace. The others still occupy theirs.
+                            if (migration[3]) mark_for_reassignment(this, migration[0].entity);
                             migrations.push(migration);
                         }
                     }
