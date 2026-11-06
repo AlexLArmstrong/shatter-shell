@@ -24,6 +24,9 @@ enum TabActive {
 
 const TAB_ICON_SIZE = 17 as const;
 
+/** With 4 pixels of padding, this makes the close button a 24 pixel circle, as in libadwaita. */
+const CLOSE_ICON_SIZE = 16 as const;
+
 /** Space between the tab bar and the window. */
 function get_tab_separation(ext: Ext): number {
     return ext.settings.get_tab_bar_gap() * ext.settings.get_size_unit() * ext.dpi;
@@ -98,7 +101,7 @@ const TabButton = GObject.registerClass(
             const close_button = new St.Button({
                 child: new St.Icon({
                     icon_name: 'window-close-symbolic',
-                    icon_size: TAB_ICON_SIZE,
+                    icon_size: CLOSE_ICON_SIZE,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
                 y_expand: true,
