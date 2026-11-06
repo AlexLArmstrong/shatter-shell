@@ -51,10 +51,6 @@ $active-tab-bg-color: rgba(0, 0, 0, 0.09) !default;
     padding: 3px;
 }
 
-.shatter-shell-tab .shatter-shell-tab-inner {
-    border-radius: 8px;
-}
-
 .shatter-shell-tab:hover .shatter-shell-tab-inner {
     background: color.scale($active-tab-bg-color, $alpha: -50%);
 }

@@ -48,6 +48,12 @@
             <summary>Height of a stack's tab bar, in size units</summary>
         </key>
 
+        <key type="u" name="tab-border-radius">
+            <default>12</default>
+            <range min="0" max="30"/>
+            <summary>Corner radius of a tab, in pixels</summary>
+        </key>
+
         <key type="b" name="mouse-cursor-follows-active-window">
             <default>false</default>
             <summary>Move cursor to active window when navigating with keyboard shortcuts or touchpad gestures</summary>

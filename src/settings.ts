@@ -74,6 +74,9 @@ export class ExtensionSettings {
     get_tab_bar_height() { return this.ext.get_uint('tab-bar-height'); }
     set_tab_bar_height(value: number) { this.ext.set_uint('tab-bar-height', value); }
 
+    get_tab_border_radius() { return this.ext.get_uint('tab-border-radius'); }
+    set_tab_border_radius(value: number) { this.ext.set_uint('tab-border-radius', value); }
+
     get_tile_by_default() { return this.ext.get_boolean('tile-by-default'); }
     set_tile_by_default(value: boolean) { this.ext.set_boolean('tile-by-default', value); }
 

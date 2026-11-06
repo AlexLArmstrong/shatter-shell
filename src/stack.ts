@@ -69,6 +69,7 @@ const TabButton = GObject.registerClass(
     },
     class TabButton extends St.Button {
         declare _title: St.Label;
+        declare _inner: St.BoxLayout;
         declare _settings: Settings.ExtensionSettings;
 
         override _init(window: ShellWindow, settings: Settings.ExtensionSettings) {
@@ -103,11 +104,11 @@ const TabButton = GObject.registerClass(
                 close_button.disconnect(on_close);
             });
 
-            const container = new St.BoxLayout({
+            const container = (this._inner = new St.BoxLayout({
                 y_expand: true,
                 y_align: Clutter.ActorAlign.CENTER,
                 style_class: 'shatter-shell-tab-inner',
-            });
+            }));
             container.add_child(icon);
             container.add_child(title);
             container.add_child(close_button);
@@ -120,10 +121,17 @@ const TabButton = GObject.registerClass(
                 child: container,
                 accessible_role: Atk.Role.PAGE_TAB,
             });
+
+            this.update_style();
         }
 
         set_title(text: string) {
             this._title.text = text;
+        }
+
+        /** Applies the current tab settings. St already applies the display scale to style pixels. */
+        update_style() {
+            this._inner.set_style(`border-radius: ${this._settings.get_tab_border_radius()}px;`);
         }
 
         set_active(tabActive: TabActive) {
@@ -589,6 +597,7 @@ export class Stack {
         if (!this.widgets) return;
 
         this.widgets.tabs.set_style(get_tab_bar_style(this.ext.settings));
+        for (const tab of this.tabs) this.buttons.get(tab.button)?.update_style();
     }
 
     /** Updates the dimensions and positions of the stack's actors */
