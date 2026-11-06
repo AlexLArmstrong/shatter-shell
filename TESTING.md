@@ -87,6 +87,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Dragging a window onto another tiled window, after removing or reordering workspaces, still tiles it with the window under the pointer.
 - [ ] Changing the primary display moves the top bar. Window heights adjust on all monitors for the new position.
 - [ ] Unplug a display - windows from the display retile on a new workspace on the remaining display
+- [ ] Unplug a display - windows that were already on the remaining display stay on their workspaces, and stacks keep their tabs
 - [ ] Plug an additional display into a laptop - windows and workspaces don't changes
 - [ ] NOTE: Add vertical monitor layout test
 

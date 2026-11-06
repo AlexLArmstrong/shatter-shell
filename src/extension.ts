@@ -2184,7 +2184,8 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                             if (!display) continue;
 
-                            if (f.monitor === old_monitor) {
+                            // A tree whose monitor is unchanged keeps its workspace
+                            if (f.monitor === old_monitor && old_monitor !== new_monitor) {
                                 f.monitor = new_monitor;
                                 f.workspace = 0;
                                 migration = [f, new_monitor, display.ws, true];
