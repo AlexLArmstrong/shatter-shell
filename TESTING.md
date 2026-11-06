@@ -64,6 +64,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Stacks can be resized with the keyboard.
 - [ ] Stacks can be resized with the mouse.
 - [ ] Only the tab bar of the stack with the focused window looks focused.
+- [ ] Changing the tab bar height and gap in the preferences, or the corner radii and tab margins with gsettings, updates existing stacks immediately.
 - [ ] Changing the size unit with gsettings resizes the gaps and the tab bars immediately.
 - [ ] By default, the tab bar's corners match those of libadwaita windows (15 pixels), and the tabs' corners are 12 pixels, whatever the size unit.
 - [ ] The space between two tabs is the same as the space at either end of the tab bar.

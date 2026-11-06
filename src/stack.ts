@@ -31,11 +31,13 @@ function get_tab_separation(ext: Ext): number {
 
 /** The tab bar's inline style. St already applies the display scale to style pixels. */
 function get_tab_bar_style(settings: Settings.ExtensionSettings): string {
-    const horizontal = settings.get_tab_margin_horizontal() * settings.get_size_unit();
+    const unit = settings.get_size_unit();
+    const vertical = settings.get_tab_margin_vertical() * unit;
+    const horizontal = settings.get_tab_margin_horizontal() * unit;
 
     // Spacing between tabs matches the margin at either end, rather than adding up to twice that
     let style = `border-radius: ${settings.get_tab_bar_border_radius()}px;`;
-    style += ` padding: 0 ${horizontal}px; spacing: ${horizontal}px;`;
+    style += ` padding: ${vertical}px ${horizontal}px; spacing: ${horizontal}px;`;
     return style;
 }
 

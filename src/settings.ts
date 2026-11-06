@@ -77,6 +77,9 @@ export class ExtensionSettings {
     get_tab_margin_horizontal() { return this.ext.get_uint('tab-margin-horizontal'); }
     set_tab_margin_horizontal(value: number) { this.ext.set_uint('tab-margin-horizontal', value); }
 
+    get_tab_margin_vertical() { return this.ext.get_uint('tab-margin-vertical'); }
+    set_tab_margin_vertical(value: number) { this.ext.set_uint('tab-margin-vertical', value); }
+
     get_tab_border_radius() { return this.ext.get_uint('tab-border-radius'); }
     set_tab_border_radius(value: number) { this.ext.set_uint('tab-border-radius', value); }
 

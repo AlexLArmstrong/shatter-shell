@@ -1614,6 +1614,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         break;
                     case 'tab-bar-border-radius':
                     case 'tab-margin-horizontal':
+                    case 'tab-margin-vertical':
                     case 'tab-border-radius':
                         if (this.auto_tiler) {
                             for (const stack of this.auto_tiler.forest.stacks.values()) stack.update_style();
