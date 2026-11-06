@@ -62,6 +62,9 @@ export class ExtensionSettings {
     get_snap_to_grid() { return this.ext.get_boolean('snap-to-grid'); }
     set_snap_to_grid(value: boolean) { this.ext.set_boolean('snap-to-grid', value); }
 
+    get_size_unit() { return this.ext.get_uint('size-unit'); }
+    set_size_unit(value: number) { this.ext.set_uint('size-unit', value); }
+
     get_tile_by_default() { return this.ext.get_boolean('tile-by-default'); }
     set_tile_by_default(value: boolean) { this.ext.set_boolean('tile-by-default', value); }
 

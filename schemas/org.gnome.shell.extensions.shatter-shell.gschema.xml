@@ -14,14 +14,20 @@
             <summary>Border radius for active window hint, in pixels</summary>
         </key>
 
+        <key type="u" name="size-unit">
+            <default>4</default>
+            <range min="2" max="16"/>
+            <summary>Pixels per step of the gaps and the tab bar's sizes. GNOME's guidelines use 6, and Material Design uses 8.</summary>
+        </key>
+
         <key type="u" name="gap-inner">
             <default>2</default>
-            <summary>Gap between tiled windows, in pixels</summary>
+            <summary>Gap between tiled windows, in size units</summary>
         </key>
 
         <key type="u" name="gap-outer">
             <default>2</default>
-            <summary>Gap surrounding tiled windows, in pixels</summary>
+            <summary>Gap surrounding tiled windows, in size units</summary>
         </key>
 
         <key type="b" name="mouse-cursor-follows-active-window">

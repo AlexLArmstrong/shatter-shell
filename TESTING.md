@@ -64,6 +64,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Stacks can be resized with the keyboard.
 - [ ] Stacks can be resized with the mouse.
 - [ ] Only the tab bar of the stack with the focused window looks focused.
+- [ ] Changing the size unit with gsettings resizes the gaps and the tab bars immediately.
 - [ ] Lock and unlock the screen-- stacks should still exist and windows should not have moved.
 - [ ] Full-screen an application within the stack, then quit the application-- the remaining tabs should be visible.
 

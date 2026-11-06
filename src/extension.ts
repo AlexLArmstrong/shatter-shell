@@ -948,7 +948,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_gap_inner() {
         const current = this.settings.get_gap_inner();
         this.set_gap_inner(current);
-        const prev_gap = this.gap_inner_prev / 4 / this.dpi;
+        const prev_gap = this.gap_inner_prev / this.settings.get_size_unit() / this.dpi;
 
         if (current != prev_gap) {
             this.update_inner_gap();
@@ -995,7 +995,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         const current = this.settings.get_gap_outer();
         this.set_gap_outer(current);
 
-        const prev_gap = this.gap_outer_prev / 4 / this.dpi;
+        const prev_gap = this.gap_outer_prev / this.settings.get_size_unit() / this.dpi;
         const diff = current - prev_gap;
 
         if (diff != 0) {
@@ -1009,10 +1009,10 @@ export class Ext extends Ecs.System<ExtEvent> {
     update_outer_gap(diff: number) {
         if (this.auto_tiler) {
             for (const [, fork] of this.auto_tiler.forest.toplevels()) {
-                fork.area.x += diff * 4;
-                fork.area.y += diff * 4;
-                fork.area.width -= diff * 8;
-                fork.area.height -= diff * 8;
+                fork.area.x += diff * this.settings.get_size_unit();
+                fork.area.y += diff * this.settings.get_size_unit();
+                fork.area.width -= diff * this.settings.get_size_unit() * 2;
+                fork.area.height -= diff * this.settings.get_size_unit() * 2;
 
                 this.auto_tiler.tile(this, fork, fork.area);
             }
@@ -1518,13 +1518,13 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     set_gap_inner(gap: number) {
         this.gap_inner_prev = this.gap_inner;
-        this.gap_inner = gap * 4 * this.dpi;
+        this.gap_inner = gap * this.settings.get_size_unit() * this.dpi;
         this.gap_inner_half = this.gap_inner / 2;
     }
 
     set_gap_outer(gap: number) {
         this.gap_outer_prev = this.gap_outer;
-        this.gap_outer = gap * 4 * this.dpi;
+        this.gap_outer = gap * this.settings.get_size_unit() * this.dpi;
     }
 
     set_overlay(rect: Mtk.Rectangle) {
@@ -1592,6 +1592,16 @@ export class Ext extends Ecs.System<ExtEvent> {
                         break;
                     case 'smart-gaps':
                         this.on_smart_gap();
+                        this.show_border_on_focused();
+                        break;
+                    case 'size-unit':
+                        this.set_gap_inner(this.settings.get_gap_inner());
+                        this.set_gap_outer(this.settings.get_gap_outer());
+                        if (this.auto_tiler) {
+                            this.retile_work_areas();
+                        } else {
+                            this.update_snapped();
+                        }
                         this.show_border_on_focused();
                         break;
                 }
@@ -2016,6 +2026,21 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     update_display_configuration_before() {}
 
+    /** Fits every tree to its monitor's work area again. */
+    retile_work_areas() {
+        if (!this.auto_tiler) return;
+
+        for (const f of this.auto_tiler.forest.forks.values()) {
+            if (!f.is_toplevel) continue;
+
+            const area = this.monitor_work_area(f.monitor);
+
+            f.smart_gapped = false;
+            f.set_area(area.copy());
+            this.auto_tiler.update_toplevel(this, f, f.monitor, this.settings.get_smart_gaps());
+        }
+    }
+
     update_display_configuration(workareas_only: boolean) {
         if (!this.auto_tiler || sessionMode.isLocked) return;
 
@@ -2067,19 +2092,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
 
         // Update every tree on each display with the new dimensions
-        const update_tiling = () => {
-            if (!this.auto_tiler) return;
-
-            for (const f of this.auto_tiler.forest.forks.values()) {
-                if (!f.is_toplevel) continue;
-
-                const area = this.monitor_work_area(f.monitor);
-
-                f.smart_gapped = false;
-                f.set_area(area.copy());
-                this.auto_tiler.update_toplevel(this, f, f.monitor, this.settings.get_smart_gaps());
-            }
-        };
+        const update_tiling = () => this.retile_work_areas();
 
         type Migration = [Fork, MonitorID, Mtk.Rectangle, boolean];
 
