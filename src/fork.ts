@@ -323,11 +323,6 @@ export class Fork {
                         break;
                     case NodeKind.STACK:
                         for (const entity of child.inner.entities) {
-                            const stack = ext.gnome_forest.forest.stacks.get(child.inner.idx);
-                            if (stack) {
-                                stack.workspace = workspace;
-                            }
-
                             const window = ext.windows.get(entity);
 
                             if (window) {
