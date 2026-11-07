@@ -48,7 +48,6 @@ export class ShellWindow {
     entity: Entity;
     meta: Meta.Window;
     ext: Ext;
-    stack: number | null = null;
     known_workspace: WorkspaceID;
     grab: boolean = false;
     activate_after_move: boolean = false;
@@ -70,6 +69,14 @@ export class ShellWindow {
     window_app: Shell.App;
 
     private border_size = 0;
+
+    /**
+     * The stack that the window is in, if any. It's looked up in the tree, which is the only record
+     * of which windows a stack holds, so that it can't disagree with it.
+     */
+    get stack(): number | null {
+        return this.ext.auto_tiler?.find_stack(this.entity)?.[1].inner.idx ?? null;
+    }
 
     /**
      * Counts the decisions about whether the window is drawn, so that a fade can tell whether a later

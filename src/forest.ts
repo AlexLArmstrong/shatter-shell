@@ -206,8 +206,6 @@ export class Forest extends Ecs.World {
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
-                window.stack = stack.idx;
-
                 if (stack_from_left) {
                     stack.entities.push(new_entity);
                 } else {
@@ -485,10 +483,6 @@ export class Forest extends Ecs.World {
             }
         }
 
-        if (stack_detach) {
-            ext.windows.with(window, w => (w.stack = null));
-        }
-
         if (untiling) this.on_detach(window);
 
         if (reflow_fork && !stack_detach) {
@@ -733,11 +727,6 @@ export class Forest extends Ecs.World {
             if (s) {
                 Node.stack_remove(this, stack, window);
             }
-        }
-
-        const win = ext.windows.get(window);
-        if (win) {
-            win.stack = null;
         }
     }
 

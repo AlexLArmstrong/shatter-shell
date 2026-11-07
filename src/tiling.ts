@@ -289,8 +289,6 @@ export class Tiler {
         Node.stack_remove(ext.auto_tiler.forest, inner, focused.entity);
         ext.auto_tiler.detach_window(ext, focused.entity);
 
-        focused.stack = null;
-
         if (fork.right) {
             let left, right;
             if (reverse) {
@@ -351,7 +349,6 @@ export class Tiler {
 
         const detach = (orientation: Clutter.Orientation, reverse: boolean) => {
             if (!ext.auto_tiler) return;
-            focused.stack = null;
 
             if (fork.right) {
                 let left, right;
@@ -564,7 +561,6 @@ export class Tiler {
 
                             if (fork.left.inner.kind === Node.NodeKind.STACK) {
                                 Node.stack_remove(at.forest, fork.left.inner, focused.entity);
-                                focused.stack = null;
                             } else {
                                 const temp = fork.right;
 

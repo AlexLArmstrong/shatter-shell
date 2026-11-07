@@ -392,13 +392,7 @@ export class Stack {
         // Disconnect stack signals from each window, and unhide them.
         for (const c of this.tabs) {
             this.tab_disconnect(c);
-            if (this.workspace === this.ext.active_workspace()) {
-                const win = this.ext.windows.get(c.entity);
-                if (win) {
-                    win.fade_in();
-                    win.stack = null;
-                }
-            }
+            if (this.workspace === this.ext.active_workspace()) this.ext.windows.get(c.entity)?.fade_in();
         }
 
         for (const b of this.buttons.values()) {
