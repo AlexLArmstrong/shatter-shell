@@ -14,9 +14,9 @@ import type { MutterWindowHandle } from './mutter_window_handle.js';
 import * as geom from '../core/geom.js';
 import { GrabKind } from '../core/grab.js';
 import { movement_is_valid } from '../core/movement.js';
+import * as Ecs from '../ecs.js';
 import * as lib from '../lib.js';
 import { Log } from '../log.js';
-import * as node from '../node.js';
 import * as stack from '../stack.js';
 
 const { overview } = Main;
@@ -241,9 +241,10 @@ export class GnomeGrab {
         if (!fork) return GLib.SOURCE_CONTINUE;
 
         if (attach_to === null) {
-            if (fork.left.inner.kind === node.NodeKind.WINDOW && fork.right?.inner.kind === node.NodeKind.WINDOW) {
-                const attaching = fork.left.is_window(win.entity) ? fork.right.inner.entity : fork.left.inner.entity;
-                attach_to = ext.windows.get(attaching);
+            const left = fork.left.lone_window();
+            const right = fork.right?.lone_window() ?? null;
+            if (left && right) {
+                attach_to = ext.windows.get(Ecs.entity_eq(left, win.entity) ? right : left);
             }
         }
 

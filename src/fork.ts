@@ -129,9 +129,6 @@ export class Fork {
                 const child = this.links.fork(inner.entity);
                 if (child) child.parent = this;
                 break;
-            case NodeKind.WINDOW:
-                this.hold_window(inner, inner.entity);
-                break;
             case NodeKind.STACK:
                 for (const window of inner.entities) this.hold_window(inner, window);
                 break;
@@ -146,9 +143,6 @@ export class Fork {
             case NodeKind.FORK:
                 const child = this.links.fork(inner.entity);
                 if (child?.parent === this) child.parent = null;
-                break;
-            case NodeKind.WINDOW:
-                this.let_go_window(inner, inner.entity);
                 break;
             case NodeKind.STACK:
                 for (const window of inner.entities) this.let_go_window(inner, window);
@@ -185,27 +179,7 @@ export class Fork {
     }
 
     find_branch(entity: Entity): Node | null {
-        const locate = (branch: Node): Node | null => {
-            switch (branch.inner.kind) {
-                case NodeKind.WINDOW:
-                    if (Ecs.entity_eq(branch.inner.entity, entity)) {
-                        return branch;
-                    }
-
-                    break;
-                case NodeKind.STACK:
-                    for (const e of branch.inner.entities) {
-                        if (Ecs.entity_eq(e, entity)) {
-                            return branch;
-                        }
-                    }
-                    break;
-                case NodeKind.FORK:
-                    break;
-            }
-
-            return null;
-        };
+        const locate = (branch: Node): Node | null => (branch.has(entity) ? branch : null);
 
         const node = locate(this.left);
         if (node) return node;
@@ -224,57 +198,11 @@ export class Fork {
 
     /** Replaces the association of a window in a fork with another */
     replace_window(ext: Ext, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
-        let closure = null;
+        const branch = this.left.has(a.entity) ? this.left : this.right?.has(a.entity) ? this.right : null;
+        if (!branch?.is_leaf()) return null;
 
-        const check_right = () => {
-            if (this.right) {
-                const inner = this.right.inner;
-                if (inner.kind === NodeKind.WINDOW) {
-                    closure = () => {
-                        node.window_set(inner, b.entity);
-                    };
-                } else if (inner.kind === NodeKind.STACK) {
-                    const idx = node.stack_find(inner, a.entity);
-                    if (idx === null) {
-                        closure = null;
-                        return;
-                    }
-
-                    closure = () => {
-                        node.stack_replace(ext, inner, a.entity, b.entity);
-                    };
-                }
-            }
-        };
-
-        switch (this.left.inner.kind) {
-            case NodeKind.FORK:
-                check_right();
-                break;
-            case NodeKind.WINDOW:
-                const inner = this.left.inner;
-                if (Ecs.entity_eq(inner.entity, a.entity)) {
-                    closure = () => {
-                        node.window_set(inner, b.entity);
-                    };
-                } else {
-                    check_right();
-                }
-
-                break;
-            case NodeKind.STACK:
-                const inner_s = this.left.inner;
-                const idx = node.stack_find(inner_s, a.entity);
-                if (idx !== null) {
-                    closure = () => {
-                        node.stack_replace(ext, inner_s, a.entity, b.entity);
-                    };
-                } else {
-                    check_right();
-                }
-        }
-
-        return closure;
+        const leaf = branch.inner;
+        return () => node.stack_replace(ext, leaf, a.entity, b.entity);
     }
 
     /** Sets a new area for this fork */
@@ -399,23 +327,13 @@ export class Fork {
                         cfork.monitor = monitor;
                         cfork.on_primary_display = primary;
                         break;
-                    case NodeKind.WINDOW:
-                        const window = ext.windows.get(child.inner.entity);
-                        if (window) {
-                            ext.size_signals_block(window);
-                            window.reassignment = false;
-                            window.known_workspace = workspace;
-                            window.meta.change_workspace_by_index(workspace, true);
-                            ext.monitors.insert(window.entity, [monitor, workspace]);
-                            blocked.push(window);
-                        }
-                        break;
                     case NodeKind.STACK:
                         for (const entity of child.inner.entities) {
                             const window = ext.windows.get(entity);
 
                             if (window) {
                                 ext.size_signals_block(window);
+                                window.reassignment = false;
                                 window.known_workspace = workspace;
                                 window.meta.change_workspace_by_index(workspace, true);
                                 ext.monitors.insert(window.entity, [monitor, workspace]);
@@ -485,9 +403,9 @@ export class Fork {
 
 function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
     switch (branch.inner.kind) {
-        case NodeKind.WINDOW:
-            return window_minimum_size(ext, branch.inner.entity);
         case NodeKind.STACK:
+            // A leaf without tabs is a window on its own
+            if (!branch.inner.tabbed) return window_minimum_size(ext, branch.inner.entities[0]!);
             return stack_minimum_size(ext, branch.inner.entities);
         case NodeKind.FORK:
             return fork_minimum_size(ext, tiler, branch.inner.entity);

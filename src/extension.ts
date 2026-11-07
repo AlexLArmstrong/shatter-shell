@@ -460,7 +460,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     stack_select(select: (id: number, stack: stack.Stack) => Entity | null | undefined, focus_shift: () => void) {
         const switched = this.stack_switch(stack => {
-            const stack_con = this.gnome_forest?.forest.stacks.get(stack.idx);
+            const stack_con = this.gnome_forest?.forest.view_of(stack);
             if (stack_con) {
                 const id = stack_con.active_id;
                 if (id !== -1) {
@@ -592,10 +592,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (entity) {
                 const fork = this.gnome_forest.forest.forks.get(entity);
                 if (fork?.right && fork.right.is_window(win)) {
-                    const entity =
-                        fork.right.inner.kind === node.NodeKind.STACK
-                            ? fork.right.inner.entities[0]!
-                            : fork.right.inner.entity;
+                    const entity = fork.right.inner.entities[0]!;
 
                     this.windows.with(entity, sibling => sibling.request_activate());
                 }
@@ -985,17 +982,12 @@ export class Ext extends Ecs.System<ExtEvent> {
                             if (child.inner.kind === node.NodeKind.FORK) {
                                 fork = this.gnome_forest.forest.forks.get(child.inner.entity);
                                 if (fork) fork.workspace = value;
-                            } else if (child.inner.kind === node.NodeKind.WINDOW) {
-                                window_move(this, child.inner.entity, value);
-                            } else if (child.inner.kind === node.NodeKind.STACK) {
-                                const stack = this.gnome_forest.forest.stacks.get(child.inner.idx);
-                                if (stack) {
-                                    for (const entity of child.inner.entities) {
-                                        window_move(this, entity, value);
-                                    }
-
-                                    stack.restack();
+                            } else if (child.is_leaf()) {
+                                for (const entity of child.inner.entities) {
+                                    window_move(this, entity, value);
                                 }
+
+                                this.gnome_forest.forest.view_of(child.inner)?.restack();
                             }
                         }
                     }
@@ -1468,12 +1460,13 @@ export class Ext extends Ecs.System<ExtEvent> {
         };
 
         function mark_for_reassignment(ext: Ext, fork: Ecs.Entity) {
-            for (const win of forest.iter(fork)) {
-                if (win.inner.kind !== node.NodeKind.WINDOW) continue;
+            for (const leaf of forest.iter(fork)) {
+                if (!leaf.is_leaf()) continue;
 
-                const entity = win.inner.entity;
-                const window = ext.windows.get(entity);
-                if (window) window.reassignment = true;
+                for (const entity of leaf.inner.entities) {
+                    const window = ext.windows.get(entity);
+                    if (window) window.reassignment = true;
+                }
             }
         }
 
