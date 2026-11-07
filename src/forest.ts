@@ -376,7 +376,7 @@ export class Forest extends Ecs.World {
     }
 
     /** Detaches an entity from the a fork, re-arranging the fork's tree as necessary */
-    detach(ext: Ext, fork_entity: Entity, window: Entity): [Entity, Fork.Fork] | null {
+    detach(ext: Ext, fork_entity: Entity, window: Entity, untiling: boolean): [Entity, Fork.Fork] | null {
         const fork = this.forks.get(fork_entity);
         if (!fork) return null;
 
@@ -456,7 +456,7 @@ export class Forest extends Ecs.World {
             ext.windows.with(window, w => (w.stack = null));
         }
 
-        this.on_detach(window);
+        if (untiling) this.on_detach(window);
 
         if (reflow_fork && !stack_detach) {
             reflow_fork[1].rebalance_orientation();

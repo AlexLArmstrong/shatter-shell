@@ -235,10 +235,14 @@ export class AutoTiler {
         ext.show_border_on_focused();
     }
 
-    /** Detaches the window from a tiling branch, if it is attached to one. */
-    detach_window(ext: Ext, win: Entity) {
+    /**
+     * Detaches the window from a tiling branch, if it is attached to one. Pass `untiling` as false when
+     * the window is only being moved to another place in the tree, so that it keeps the position it
+     * returns to once it's untiled.
+     */
+    detach_window(ext: Ext, win: Entity, untiling: boolean = true) {
         this.attached.take_with(win, prev_fork => {
-            const reflow_fork = this.forest.detach(ext, prev_fork, win);
+            const reflow_fork = this.forest.detach(ext, prev_fork, win, untiling);
 
             if (reflow_fork) {
                 const fork = reflow_fork[1];
@@ -250,8 +254,6 @@ export class AutoTiler {
 
                 this.tile(ext, fork, fork.area);
             }
-
-            ext.windows.with(win, info => (info.ignore_detach = false));
         });
     }
 

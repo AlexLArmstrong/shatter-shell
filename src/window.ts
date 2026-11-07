@@ -52,7 +52,6 @@ export class ShellWindow {
     known_workspace: WorkspaceID;
     grab: boolean = false;
     activate_after_move: boolean = false;
-    ignore_detach: boolean = false;
     was_attached_to?: [Entity, boolean | number];
     destroying: boolean = false;
 

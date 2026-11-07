@@ -909,7 +909,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_tile_detach(win: Entity) {
         if (!this.settings.get_untile_reset_windows()) return;
         this.windows.with(win, window => {
-            if (window.prev_rect && !window.ignore_detach) {
+            if (window.prev_rect) {
                 this.register(Events.window_move(this, window, window.prev_rect));
                 window.prev_rect = null;
             }
@@ -1319,9 +1319,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (actor) global.window_group.set_child_above_sibling(actor, null);
 
             this.on_monitor_changed(win, (_cfrom, cto, workspace) => {
-                win.ignore_detach = true;
                 this.monitors.insert(win.entity, [cto, workspace]);
-                this.auto_tiler?.detach_window(this, win.entity);
+                this.auto_tiler?.detach_window(this, win.entity, false);
             });
         } else {
             // Retile on unmaximize after waiting for other events to complete, such as animations
@@ -1466,10 +1465,9 @@ export class Ext extends Ecs.System<ExtEvent> {
             const id = this.workspace_id(win);
             const prev_id = this.monitors.get(win.entity);
             if (!prev_id || id[0] != prev_id[0] || id[1] != prev_id[1]) {
-                win.ignore_detach = true;
                 this.monitors.insert(win.entity, id);
                 if (win.is_tilable()) {
-                    this.auto_tiler.detach_window(this, win.entity);
+                    this.auto_tiler.detach_window(this, win.entity, false);
                     this.auto_tiler.attach_to_workspace(this, win, id);
                 }
             }

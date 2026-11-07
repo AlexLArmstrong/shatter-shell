@@ -554,16 +554,14 @@ export class Tiler {
 
                     const placement = { auto: 0 } as const;
 
-                    focused.ignore_detach = true;
-                    at.detach_window(ext, focused.entity);
+                    at.detach_window(ext, focused.entity, false);
 
                     at.forest.on_attach(stack_fork.entity, focused.entity);
                     at.update_stack(ext, stack);
 
                     at.tile(ext, stack_fork, stack_fork.area);
 
-                    focused.ignore_detach = true;
-                    at.detach_window(ext, focused.entity);
+                    at.detach_window(ext, focused.entity, false);
                     at.attach_to_window(ext, move_to, focused, placement, stack_from_left);
                     watching = focused;
                 } else {
@@ -594,15 +592,13 @@ export class Tiler {
                     if (!watching) {
                         const movement = { src: focused.meta.get_frame_rect() };
 
-                        focused.ignore_detach = true;
-                        at.detach_window(ext, focused.entity);
+                        at.detach_window(ext, focused.entity, false);
                         at.attach_to_window(ext, move_to, focused, movement, false);
                         watching = focused;
                     }
                 }
             } else {
-                focused.ignore_detach = true;
-                at.detach_window(ext, focused.entity);
+                at.detach_window(ext, focused.entity, false);
                 at.attach_to_workspace(ext, focused, [move_to, ext.active_workspace()]);
                 watching = focused;
             }
