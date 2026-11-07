@@ -471,9 +471,9 @@ export class GnomeTilingMode {
 
     rect_by_active_area(callback: (monitor: Mtk.Rectangle, area: Mtk.Rectangle) => void) {
         if (this.window) {
-            const monitor_id = this.ext.monitors.get(this.window);
-            if (monitor_id) {
-                const monitor = this.ext.monitor_work_area(monitor_id[0]);
+            const window = this.ext.windows.get(this.window);
+            if (window) {
+                const monitor = this.ext.monitor_work_area(this.ext.placement(window)[0]);
                 const rect = this.rect(monitor);
 
                 if (rect) {
