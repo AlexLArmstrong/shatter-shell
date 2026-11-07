@@ -146,10 +146,26 @@ export class ShellWindow {
         return this.fade_id;
     }
 
-    /** Fades the window in */
+    /**
+     * Whether the window may be shown. Mutter shows a window when its workspace becomes active, or
+     * when it's unminimized, and one shown any sooner would be drawn where it can't be used.
+     */
+    can_show(): boolean {
+        if (this.meta.minimized) return false;
+        return this.meta.located_on_workspace(global.workspace_manager.get_active_workspace());
+    }
+
+    /** Fades the window in, unless it may not be shown yet */
     fade_in() {
         const actor = this.actor();
         if (!actor) return;
+
+        if (!this.can_show()) {
+            // Still cancel a pending fade-out, so that the window is shown along with its workspace
+            this.restore_opacity();
+            return;
+        }
+
         this.next_fade();
 
         if (actor.visible && actor.opacity >= 255) {
@@ -189,7 +205,7 @@ export class ShellWindow {
         });
     }
 
-    /** Shows the window straight away */
+    /** Shows the window straight away, unless it may not be shown yet */
     show_now() {
         const actor = this.actor();
         if (!actor) return;
@@ -197,7 +213,7 @@ export class ShellWindow {
         this.next_fade();
         actor.remove_all_transitions();
         actor.opacity = 255;
-        actor.show();
+        if (this.can_show()) actor.show();
     }
 
     /** Hides the window straight away */
