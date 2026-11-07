@@ -329,7 +329,6 @@ export class Fork {
                         for (const window of child.inner.windows) {
                             ext.size_signals_block(window);
                             window.reassignment = false;
-                            window.known_workspace = workspace;
                             window.meta.change_workspace_by_index(workspace, true);
                             ext.monitors.insert(window.entity, [monitor, workspace]);
                             blocked.push(window);
@@ -344,7 +343,7 @@ export class Fork {
 
             this.set_area(area.copy());
             this.measure(forest, ext, area, forest.on_record());
-            forest.arrange(ext, workspace, true);
+            forest.arrange(ext);
 
             for (const window of blocked) {
                 ext.size_signals_unblock(window);

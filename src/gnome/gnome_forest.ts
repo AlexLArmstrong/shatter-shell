@@ -552,7 +552,7 @@ export class GnomeForest {
         if (leaf.inner.tabbed) return;
 
         leaf.inner.tabbed = true;
-        leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner, fork.workspace));
+        leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner));
     }
 
     private remove_tabs(leaf: node.Node<node.NodeLeaf>) {
@@ -671,7 +671,7 @@ export class GnomeForest {
             }
         }
 
-        this.forest.arrange(this.ext, fork.workspace, true);
+        this.forest.arrange(this.ext);
 
         return Ok(void 0);
     }
