@@ -72,6 +72,12 @@ export class ShellWindow {
 
     private border_size = 0;
 
+    /**
+     * Counts the decisions about whether the window is drawn, so that a fade can tell whether a later
+     * one has superseded it.
+     */
+    private fade_id = 0;
+
     constructor(entity: Entity, window: Meta.Window, window_app: Shell.App, ext: Ext) {
         this.window_app = window_app;
 
@@ -126,21 +132,35 @@ export class ShellWindow {
     /*
      * Whether the window is drawn. These are the only methods that change the visibility or the
      * opacity of the window's actor, or fade between them, so that one set of rules applies to every
-     * change. Each does nothing if the window has no actor.
+     * change, and a later decision always overrides an earlier one. Each does nothing if the window
+     * has no actor.
      */
 
     private actor(): Meta.WindowActor | null {
         return this.meta.get_compositor_private<Meta.WindowActor | null>();
     }
 
+    /** Records a new decision about whether the window is drawn, superseding any running fade */
+    private next_fade(): number {
+        this.fade_id += 1;
+        return this.fade_id;
+    }
+
     /** Fades the window in */
     fade_in() {
         const actor = this.actor();
         if (!actor) return;
-        if (actor.visible && actor.opacity >= 255) return;
+        this.next_fade();
+
+        if (actor.visible && actor.opacity >= 255) {
+            // A fade-out that has only just started still reads as fully opaque. Stop it.
+            actor.remove_transition('opacity');
+            actor.opacity = 255;
+            return;
+        }
 
         actor.remove_all_transitions();
-        if (actor.opacity > 250) actor.opacity = 0;
+        if (!actor.visible) actor.opacity = 0;
         actor.show();
         actor.ease({
             opacity: 255,
@@ -149,10 +169,12 @@ export class ShellWindow {
         });
     }
 
-    /** Fades the window out, then hides it */
+    /** Fades the window out, then hides it, unless something else has been decided by then */
     fade_out() {
         const actor = this.actor();
-        if (!actor?.visible) return;
+        if (!actor) return;
+        const id = this.next_fade();
+        if (!actor.visible) return;
 
         actor.remove_all_transitions();
         actor.ease({
@@ -160,6 +182,7 @@ export class ShellWindow {
             duration: FADE_DURATION * (actor.opacity / 255),
             mode: Clutter.AnimationMode.EASE_IN_QUART,
             onComplete: () => {
+                if (this.fade_id !== id) return;
                 actor.hide();
                 actor.opacity = 255;
             },
@@ -171,6 +194,7 @@ export class ShellWindow {
         const actor = this.actor();
         if (!actor) return;
 
+        this.next_fade();
         actor.remove_all_transitions();
         actor.opacity = 255;
         actor.show();
@@ -181,15 +205,20 @@ export class ShellWindow {
         const actor = this.actor();
         if (!actor) return;
 
+        this.next_fade();
         actor.remove_all_transitions();
         actor.hide();
         actor.opacity = 255;
     }
 
-    /** Makes the window opaque, without changing whether it's shown */
+    /** Stops any fade and makes the window opaque, without changing whether it's shown */
     restore_opacity() {
         const actor = this.actor();
-        if (actor) actor.opacity = 255;
+        if (!actor) return;
+
+        this.next_fade();
+        actor.remove_transition('opacity');
+        actor.opacity = 255;
     }
 
     /** Stops every transition on the window, such as before moving it */

@@ -50,6 +50,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Windows can be moved out of a stack.
 - [ ] Windows inside and outside of a stack can be swapped multiple times and in both directions.
 - [ ] Moving the last window out of a stack works as expected.
+- [ ] Quickly switching tabs and then closing or moving one never leaves a window that only appears in the overview and workspace animations.
 - [ ] Stacks can be resized with the keyboard.
 - [ ] Stacks can be resized with the mouse.
 - [ ] Only the tab bar of the stack with the focused window looks focused.
