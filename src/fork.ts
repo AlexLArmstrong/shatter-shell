@@ -241,8 +241,7 @@ export class Fork {
                     }
 
                     closure = () => {
-                        node.stack_replace(ext, inner, b);
-                        node.stack_set(inner, idx, b.entity);
+                        node.stack_replace(ext, inner, a.entity, b.entity);
                     };
                 }
             }
@@ -267,10 +266,8 @@ export class Fork {
                 const inner_s = this.left.inner;
                 const idx = node.stack_find(inner_s, a.entity);
                 if (idx !== null) {
-                    const id = idx;
                     closure = () => {
-                        node.stack_replace(ext, inner_s, b);
-                        node.stack_set(inner_s, id, b.entity);
+                        node.stack_replace(ext, inner_s, a.entity, b.entity);
                     };
                 } else {
                     check_right();

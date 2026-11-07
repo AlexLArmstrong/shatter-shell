@@ -196,11 +196,8 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
-                Node.stack_add(stack, new_entity, !stack_from_left);
-
                 this.on_attach(new_entity);
-
-                ext.gnome_forest?.update_stack(stack);
+                Node.stack_insert(ext, stack, new_entity, stack_from_left);
 
                 if (window.meta.has_focus()) {
                     container.activate(new_entity);
@@ -737,10 +734,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
             this.stacks.remove(stack.idx)?.destroy();
             on_last();
         } else {
-            const s = this.stacks.get(stack.idx);
-            if (s) {
-                Node.stack_remove(this, stack, window);
-            }
+            Node.stack_remove(ext, stack, window);
         }
     }
 

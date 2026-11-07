@@ -6,8 +6,7 @@ import type { Forest } from './forest.js';
 import type { Fork } from './fork.js';
 
 import * as Ecs from './ecs.js';
-import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
-import { TAB_HEIGHT_UNSCALED, type Stack } from './stack.js';
+import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
 /** A node is either a fork, a window, or a stack. */
 export enum NodeKind {
@@ -44,39 +43,6 @@ export interface NodeWindow {
     parent: Fork | null;
 }
 
-export interface NodeStack {
-    kind: NodeKind.STACK;
-    idx: number;
-    entities: Array<Entity>;
-    rect: Mtk.Rectangle | null;
-    /** The fork whose branch this is, kept by {@link Fork} */
-    parent: Fork | null;
-}
-
-/** Puts a window into the stack's leaf, at its front or its back */
-export function stack_add(node: NodeStack, window: Entity, front = false) {
-    if (front) {
-        node.entities.unshift(window);
-    } else {
-        node.entities.push(window);
-    }
-    node.parent?.hold_window(node, window);
-}
-
-/** Puts a window in place of the one at `idx` in the stack's leaf */
-export function stack_set(node: NodeStack, idx: number, window: Entity) {
-    const previous = node.entities[idx];
-    node.entities[idx] = window;
-    node.parent?.hold_window(node, window);
-    if (previous) node.parent?.let_go_window(node, previous);
-}
-
-/** Takes the window at `idx` out of the stack's leaf */
-function stack_take(node: NodeStack, idx: number) {
-    const [window] = node.entities.splice(idx, 1);
-    if (window) node.parent?.let_go_window(node, window);
-}
-
 /** Puts a window in place of the one in the leaf */
 export function window_set(node: NodeWindow, window: Entity) {
     const previous = node.entity;
@@ -85,100 +51,141 @@ export function window_set(node: NodeWindow, window: Entity) {
     node.parent?.let_go_window(node, previous);
 }
 
-function stack_detach(node: NodeStack, stack: Stack, idx: number) {
-    stack_take(node, idx);
-    stack.remove_by_pos(idx);
+/**
+ * A leaf of the tree that holds windows, and shows one of them at a time. This is everything there is
+ * to know about a stack: its Stack in Forest.stacks only draws it, with a tab bar.
+ */
+export interface NodeStack {
+    kind: NodeKind.STACK;
+    /** The index of the Stack in Forest.stacks that draws this leaf */
+    idx: number;
+    /** The windows, in the order of their tabs */
+    entities: Array<Entity>;
+    /** The window that is shown. It's always one of the entities while there are any. */
+    active: Entity;
+    /** The window that was shown before, which is shown again when the active one leaves */
+    prev_active: Entity | null;
+    rect: Mtk.Rectangle | null;
+    /** The fork whose branch this is, kept by {@link Fork} */
+    parent: Fork | null;
+}
+
+/*
+ * A stack's windows, their order, and which of them is active only change through the functions
+ * below, which draw the stack again before they return.
+ */
+
+/** Draws the stack again from the tree */
+function sync_tabs(ext: Ext, node: NodeStack) {
+    ext.gnome_forest?.update_stack(node);
 }
 
 export function stack_find(node: NodeStack, entity: Entity) {
-    let idx = 0;
-    while (idx < node.entities.length) {
-        if (Ecs.entity_eq(entity, node.entities[idx]!)) {
-            return idx;
-        }
-        idx += 1;
+    const idx = node.entities.findIndex(other => Ecs.entity_eq(entity, other));
+    return idx === -1 ? null : idx;
+}
+
+/** Shows this window of the stack, and remembers the one that was shown before */
+export function stack_activate(ext: Ext, node: NodeStack, entity: Entity) {
+    if (stack_find(node, entity) === null) return;
+
+    if (!Ecs.entity_eq(node.active, entity)) {
+        node.prev_active = node.active;
+        node.active = entity;
     }
 
-    return null;
+    sync_tabs(ext, node);
 }
 
-/** Move the window in a stack to the left, and detach if it it as the end. */
-export function stack_move_left(ext: Ext, forest: Forest, node: NodeStack, entity: Entity): boolean {
-    const stack = forest.stacks.get(node.idx);
-    if (!stack) return false;
+/** Adds a window at either end of a stack, behind its active window */
+export function stack_insert(ext: Ext, node: NodeStack, entity: Entity, at_end: boolean) {
+    if (at_end) {
+        node.entities.push(entity);
+    } else {
+        node.entities.unshift(entity);
+    }
+    node.parent?.hold_window(node, entity);
 
-    let idx = 0;
-    for (const cmp of node.entities) {
-        if (Ecs.entity_eq(cmp, entity)) {
-            if (idx === 0) {
-                // Remove the window from the stack
-                stack_detach(node, stack, 0);
-                return false;
-            } else {
-                // Swap tabs in the stack
-                stack_swap(node, idx - 1, idx);
-                stack.active_id -= 1;
-                ext.gnome_forest?.update_stack(node);
-                return true;
-            }
-        }
+    sync_tabs(ext, node);
+}
 
-        idx += 1;
+/**
+ * Removes a window from a stack, returning where it was. If it was the active one, the previously
+ * active window takes over if it's still there, and otherwise the one that is now in its place.
+ */
+export function stack_remove(ext: Ext, node: NodeStack, entity: Entity): number | null {
+    const idx = stack_find(node, entity);
+    if (idx === null) return null;
+
+    node.entities.splice(idx, 1);
+    node.parent?.let_go_window(node, entity);
+
+    if (node.prev_active && Ecs.entity_eq(node.prev_active, entity)) node.prev_active = null;
+
+    if (Ecs.entity_eq(node.active, entity)) {
+        const next = node.prev_active ?? node.entities[Math.min(idx, node.entities.length - 1)];
+        if (next) node.active = next;
+        node.prev_active = null;
     }
 
-    return false;
-}
-
-/** Move the window in a stack to the right, and detach if it is at the end. */
-export function stack_move_right(ext: Ext, forest: Forest, node: NodeStack, entity: Entity): boolean {
-    const stack = forest.stacks.get(node.idx);
-    if (!stack) return false;
-
-    let moved = false;
-    let idx = 0;
-    const max = node.entities.length - 1;
-    for (const cmp of node.entities) {
-        if (Ecs.entity_eq(cmp, entity)) {
-            if (idx === max) {
-                stack_detach(node, stack, idx);
-                moved = false;
-            } else {
-                stack_swap(node, idx + 1, idx);
-                stack.active_id += 1;
-                ext.gnome_forest?.update_stack(node);
-                moved = true;
-            }
-            break;
-        }
-
-        idx += 1;
-    }
-
-    return moved;
-}
-
-export function stack_replace(ext: Ext, node: NodeStack, window: MutterWindowHandle) {
-    if (!ext.gnome_forest) return;
-
-    const stack = ext.gnome_forest.forest.stacks.get(node.idx);
-    if (!stack) return;
-
-    stack.replace(window);
-}
-
-/** Removes a window from a stack */
-export function stack_remove(forest: Forest, node: NodeStack, entity: Entity) {
-    const stack = forest.stacks.get(node.idx);
-    if (!stack) return null;
-    const idx = stack.remove_tab(entity);
-    if (idx !== null) stack_take(node, idx);
+    sync_tabs(ext, node);
     return idx;
 }
 
-function stack_swap(node: NodeStack, from: number, to: number) {
-    const tmp = node.entities[from];
-    node.entities[from] = node.entities[to]!;
-    node.entities[to] = tmp!;
+/**
+ * Puts another window in the place of one in a stack, such as when swapping windows, and makes it
+ * active if that one was
+ */
+export function stack_replace(ext: Ext, node: NodeStack, old: Entity, entity: Entity) {
+    const idx = stack_find(node, old);
+    if (idx === null) return;
+
+    node.entities[idx] = entity;
+    node.parent?.hold_window(node, entity);
+    // A window that is still in the stack, such as when it replaces itself, stays linked to it
+    if (stack_find(node, old) === null) node.parent?.let_go_window(node, old);
+    if (Ecs.entity_eq(node.active, old)) node.active = entity;
+    if (node.prev_active && Ecs.entity_eq(node.prev_active, old)) node.prev_active = entity;
+
+    sync_tabs(ext, node);
+}
+
+function stack_swap(ext: Ext, node: NodeStack, from: number, to: number) {
+    const a = node.entities[from];
+    const b = node.entities[to];
+    if (a === undefined || b === undefined) return;
+
+    node.entities[from] = b;
+    node.entities[to] = a;
+    sync_tabs(ext, node);
+}
+
+/** Move the window in a stack to the left, and detach if it it as the end. */
+export function stack_move_left(ext: Ext, node: NodeStack, entity: Entity): boolean {
+    const idx = stack_find(node, entity);
+    if (idx === null) return false;
+
+    if (idx === 0) {
+        stack_remove(ext, node, entity);
+        return false;
+    }
+
+    stack_swap(ext, node, idx - 1, idx);
+    return true;
+}
+
+/** Move the window in a stack to the right, and detach if it is at the end. */
+export function stack_move_right(ext: Ext, node: NodeStack, entity: Entity): boolean {
+    const idx = stack_find(node, entity);
+    if (idx === null) return false;
+
+    if (idx === node.entities.length - 1) {
+        stack_remove(ext, node, entity);
+        return false;
+    }
+
+    stack_swap(ext, node, idx + 1, idx);
+    return true;
 }
 
 /** A leaf of the tree, which holds one window or a stack of them */
@@ -209,6 +216,8 @@ export class Node<T extends NodeADT = NodeADT> {
         return new Node({
             kind: NodeKind.STACK,
             entities: [window],
+            active: window,
+            prev_active: null,
             idx,
             rect: null,
             parent: null,

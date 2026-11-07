@@ -51,6 +51,9 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Windows can be moved into a stack.
 - [ ] Windows can be moved out of a stack.
 - [ ] Windows inside and outside of a stack can be swapped multiple times and in both directions.
+- [ ] Closing the active tab returns to the tab that was active before it, and swapping the active tab with a window outside the stack makes that window the active tab.
+- [ ] Moving a tab left or right with the keyboard keeps it active, and moving it past either end takes it out of the stack.
+- [ ] Swapping a stacked window, moving a tab, or a new window joining a stack never shows two of the stack's windows at once, not even for a frame.
 - [ ] Moving the last window out of a stack works as expected.
 - [ ] A stack dissolves into a plain window when closing, moving or dragging away its second-last window, and focus stays on the remaining window after a close.
 - [ ] With "Auto-dissolve stacks with a single window" disabled, a stack keeps its tab bar when only one window is left in it, and closing a window in it focuses the remaining one.
