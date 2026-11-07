@@ -206,15 +206,8 @@ export class Forest extends Ecs.World {
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
-                if (stack_from_left) {
-                    stack.entities.push(new_entity);
-                } else {
-                    stack.entities.unshift(new_entity);
-                }
-
                 this.on_attach(new_entity);
-
-                ext.auto_tiler?.update_stack(ext, stack);
+                Node.stack_insert(ext, stack, new_entity, stack_from_left);
 
                 if (window.meta.has_focus()) {
                     container.activate(new_entity);
@@ -723,10 +716,7 @@ export class Forest extends Ecs.World {
             this.stacks.remove(stack.idx)?.destroy();
             on_last();
         } else {
-            const s = this.stacks.get(stack.idx);
-            if (s) {
-                Node.stack_remove(this, stack, window);
-            }
+            Node.stack_remove(ext, stack, window);
         }
     }
 

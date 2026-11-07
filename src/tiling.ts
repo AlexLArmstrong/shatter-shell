@@ -286,7 +286,7 @@ export class Tiler {
         if (!ext.auto_tiler) return;
 
         const inner = branch.inner;
-        Node.stack_remove(ext.auto_tiler.forest, inner, focused.entity);
+        Node.stack_remove(ext, inner, focused.entity);
         ext.auto_tiler.detach_window(ext, focused.entity);
 
         if (fork.right) {
@@ -344,7 +344,6 @@ export class Tiler {
             fork.set_area(rect);
         }
 
-        const forest = ext.auto_tiler.forest;
         const fentity = focused.entity;
 
         const detach = (orientation: Clutter.Orientation, reverse: boolean) => {
@@ -377,9 +376,9 @@ export class Tiler {
         switch (direction) {
             case Direction.Left:
                 if (force_detach) {
-                    Node.stack_remove(forest, inner, fentity);
+                    Node.stack_remove(ext, inner, fentity);
                     detach(Clutter.Orientation.HORIZONTAL, false);
-                } else if (!Node.stack_move_left(ext, forest, inner, fentity)) {
+                } else if (!Node.stack_move_left(ext, inner, fentity)) {
                     detach(Clutter.Orientation.HORIZONTAL, false);
                 }
 
@@ -388,9 +387,9 @@ export class Tiler {
 
             case Direction.Right:
                 if (force_detach) {
-                    Node.stack_remove(forest, inner, fentity);
+                    Node.stack_remove(ext, inner, fentity);
                     detach(Clutter.Orientation.HORIZONTAL, true);
-                } else if (!Node.stack_move_right(ext, forest, inner, fentity)) {
+                } else if (!Node.stack_move_right(ext, inner, fentity)) {
                     detach(Clutter.Orientation.HORIZONTAL, true);
                 }
 
@@ -398,12 +397,12 @@ export class Tiler {
                 break;
 
             case Direction.Up:
-                Node.stack_remove(forest, inner, fentity);
+                Node.stack_remove(ext, inner, fentity);
                 detach(Clutter.Orientation.VERTICAL, false);
                 break;
 
             case Direction.Down:
-                Node.stack_remove(forest, inner, fentity);
+                Node.stack_remove(ext, inner, fentity);
                 detach(Clutter.Orientation.VERTICAL, true);
                 break;
         }
@@ -560,7 +559,7 @@ export class Tiler {
                             }
 
                             if (fork.left.inner.kind === Node.NodeKind.STACK) {
-                                Node.stack_remove(at.forest, fork.left.inner, focused.entity);
+                                Node.stack_remove(ext, fork.left.inner, focused.entity);
                             } else {
                                 const temp = fork.right;
 

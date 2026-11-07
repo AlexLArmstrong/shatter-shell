@@ -1,11 +1,13 @@
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
+import type { NodeStack } from './node.js';
 import type * as Settings from './settings.js';
 import type { ShellWindow } from './window.js';
 
 import * as a from './arena.js';
 import * as Ecs from './ecs.js';
 import { workspaceID } from './lib.js';
+import * as Node from './node.js';
 
 const Arena = a.Arena;
 import Atk from 'gi://Atk';
@@ -27,7 +29,6 @@ export const TAB_HEIGHT_UNSCALED = 43 as const;
 const TAB_SEPARATION_UNSCALED = 3 as const;
 
 interface Tab {
-    active: boolean;
     entity: Entity;
     button: number;
     button_signal: SignalID | null;
@@ -142,17 +143,26 @@ const TabButton = GObject.registerClass(
 export class Stack {
     ext: Ext;
 
+    /**
+     * The leaf of the tree that this draws, which holds everything there is to know about the stack:
+     * its windows, their order, and which of them is active. A leaf and its Stack are created and
+     * destroyed together, and only the functions in node.ts change the leaf.
+     */
+    readonly node: NodeStack;
+
     widgets: StackWidgets | null = null;
 
-    /** The currently active tab */
-    active: Entity;
-    /** The currently active tab's index */
-    active_id: number = 0;
-
-    prev_active: Entity | null = null;
-    prev_active_id: number = 0;
-
+    /**
+     * One tab per window of the leaf, in its order, as last drawn. This only holds each tab's widgets
+     * and signals, and sync rebuilds it from the leaf whenever the leaf changes.
+     */
     tabs: Array<Tab> = [];
+
+    /** The active window as last drawn, so that sync can tell whether it changed */
+    private drawn_active: Entity | null = null;
+
+    /** The window whose position and size the tab bar follows, with its signals */
+    private followed: [Meta.Window, SignalID, SignalID] | null = null;
 
     /** The workspace that the stack was created on, for until its active window has one. */
     private initial_workspace: WorkspaceID;
@@ -164,8 +174,6 @@ export class Stack {
 
     stack_rect: Mtk.Rectangle = new Mtk.Rectangle({ x: 0, y: 0, width: 0, height: 0 });
 
-    private active_signals: [SignalID, SignalID] | null = null;
-
     private rect: Mtk.Rectangle = new Mtk.Rectangle({ x: 0, y: 0, width: 0, height: 0 });
 
     private restacker: SignalID = global.display.connect('restacked', () => this.restack());
@@ -174,9 +182,9 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, active: Entity, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeStack, workspace: WorkspaceID) {
         this.ext = ext;
-        this.active = active;
+        this.node = node;
         this.initial_workspace = workspace;
         this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.dpi;
         this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.dpi;
@@ -188,10 +196,87 @@ export class Stack {
         this.reposition();
 
         this.tabs_destroy = this.widgets.tabs.connect('destroy', () => this.recreate_widgets());
+
+        this.follow_active();
     }
 
-    /** Adds a new window to the stack */
-    add(window: ShellWindow) {
+    /** The window that is shown, which the leaf decides */
+    get active(): Entity {
+        return this.node.active;
+    }
+
+    /** The window that was shown before, which the leaf decides */
+    get prev_active(): Entity | null {
+        return this.node.prev_active;
+    }
+
+    /** The index of the active tab, or -1 if it has none */
+    get active_id(): number {
+        return this.index_of(this.active);
+    }
+
+    private index_of(entity: Entity): number {
+        return this.tabs.findIndex(tab => Ecs.entity_eq(tab.entity, entity));
+    }
+
+    /**
+     * Draws the leaf: makes the tabs match its windows, in their order, and shows its active window
+     * and hides the others. Only what differs from the last time is changed, so a retile with no
+     * change to the leaf leaves its windows alone. Windows that left are released.
+     *
+     * AutoTiler.update_stack calls this whenever the leaf changes, before the change returns.
+     */
+    sync() {
+        if (!this.widgets) return;
+
+        const windows: Array<ShellWindow> = [];
+        for (const entity of this.node.entities) {
+            const window = this.ext.windows.get(entity);
+            if (window) windows.push(window);
+        }
+
+        const in_windows = (entity: Entity) => windows.some(window => Ecs.entity_eq(window.entity, entity));
+        const added: Array<Entity> = [];
+        let changed = false;
+
+        for (let idx = this.tabs.length - 1; idx >= 0; idx -= 1) {
+            const tab = this.tabs[idx];
+            if (tab && !in_windows(tab.entity)) {
+                this.remove_tab_component(tab, idx);
+                changed = true;
+            }
+        }
+
+        for (const window of windows) {
+            if (this.index_of(window.entity) === -1) {
+                this.add_tab(window);
+                added.push(window.entity);
+                changed = true;
+            }
+        }
+
+        const ordered: Array<Tab> = [];
+        for (const window of windows) {
+            const tab = this.tabs[this.index_of(window.entity)];
+            if (tab) ordered.push(tab);
+        }
+        this.tabs = ordered;
+
+        for (const [idx, tab] of this.tabs.entries()) {
+            const button = this.buttons.get(tab.button);
+            if (button) this.widgets.tabs.set_child_at_index(button, idx);
+        }
+
+        if (this.drawn_active === null || !Ecs.entity_eq(this.drawn_active, this.active)) {
+            this.follow_active();
+            changed = true;
+        }
+
+        if (changed) this.show_active(added);
+    }
+
+    /** Adds a tab for the window, without changing whether the window is shown */
+    private add_tab(window: ShellWindow) {
         if (!this.widgets) return;
 
         const entity = window.entity;
@@ -202,97 +287,61 @@ export class Stack {
         button.set_active(active ? TabActive.active : TabActive.inactive);
         const id = this.buttons.insert(button);
 
-        const tab: Tab = { active, entity, signals: [], button: id, button_signal: null };
+        const tab: Tab = { entity, signals: [], button: id, button_signal: null };
         this.bind_hint_events(tab);
         this.tabs.push(tab);
         this.update_focus();
         this.watch_signals(tab, window);
         this.widgets.tabs.add_child(button);
-
-        if (active) {
-            window.show_now();
-        } else {
-            window.hide_now();
-        }
-    }
-
-    /** Activates a tab based on the previously active entry */
-    auto_activate(): Entity | null {
-        if (this.tabs.length === 0) return null;
-
-        if (this.tabs.length <= this.active_id) {
-            this.active_id = this.tabs.length - 1;
-        }
-
-        const c = this.tabs[this.active_id];
-        if (!c) return null;
-
-        this.activate(c.entity);
-        return c.entity;
     }
 
     activate_prev() {
-        if (this.prev_active) {
-            this.activate(this.prev_active);
-        }
+        if (this.prev_active) this.activate(this.prev_active);
     }
 
-    /** Activates the tab of this entity, and hides other windows. */
+    /** Shows this window of the stack, by changing the leaf */
     activate(entity: Entity) {
-        const permitted = this.permitted_to_show();
-        if (this.widgets) this.widgets.tabs.visible = permitted;
+        Node.stack_activate(this.ext, this.node, entity);
+    }
 
-        const win = this.ext.windows.get(entity);
-        if (!win) return;
+    /**
+     * Shows the active tab's window and hides the others, and marks the active tab. Windows on another
+     * workspace are shown by mutter along with it, so the tab bar only shows where the stack may.
+     *
+     * The windows of tabs that were only just added change straight away rather than fade, so that a
+     * window joining the stack behind the active one is never seen.
+     */
+    private show_active(added: Array<Entity>) {
+        if (!this.widgets) return;
+        this.widgets.tabs.visible = this.permitted_to_show();
+        this.drawn_active = this.active;
 
-        if (!Ecs.entity_eq(entity, this.active)) {
-            this.prev_active = this.active;
-            this.prev_active_id = this.active_id;
-        }
-
-        this.active_connect(win.meta, entity);
-
-        let id = 0;
-        for (const [_idx, tab] of this.tabs.entries()) {
-            let tab_active: TabActive;
-
+        for (const tab of this.tabs) {
             this.window_exec(tab, tab.entity, window => {
-                if (Ecs.entity_eq(entity, tab.entity)) {
-                    this.active_id = id;
-                    tab.active = true;
-                    tab_active = TabActive.active;
-                    window.fade_in();
+                const active = Ecs.entity_eq(tab.entity, this.active);
+                const is_new = added.some(entity => Ecs.entity_eq(entity, tab.entity));
+
+                if (active) {
+                    if (is_new) window.show_now();
+                    else window.fade_in();
+                } else if (is_new) {
+                    window.hide_now();
                 } else {
-                    tab.active = false;
-                    tab_active = TabActive.inactive;
                     window.fade_out();
                 }
 
-                const button = this.buttons.get(tab.button);
-                if (button) {
-                    button.set_active(tab_active);
-                }
+                this.buttons.get(tab.button)?.set_active(active ? TabActive.active : TabActive.inactive);
             });
-
-            id += 1;
         }
-
-        this.reset_visibility(permitted);
     }
 
-    /** Connects `on_window_changed` callbacks to the newly-active window */
-    private active_connect(window: Meta.Window, active: Entity) {
-        // Disconnect before attaching new window as active window
-        this.active_disconnect();
+    /** Makes the tab bar follow the position and size of the active window, instead of the last one */
+    private follow_active() {
+        this.unfollow();
 
-        // Memorize them for future calls
-        this.active = active;
+        const window = this.ext.windows.get(this.active);
+        if (!window) return;
 
-        this.active_reconnect(window);
-    }
-
-    private active_reconnect(window: Meta.Window) {
-        // Attach this callback on both signals of the window
         const on_window_changed = () =>
             this.on_grab(() => {
                 const window = this.ext.windows.get(this.active);
@@ -300,25 +349,25 @@ export class Stack {
                     this.update_positions(window.meta.get_frame_rect());
                     this.window_changed();
                 } else {
-                    this.active_disconnect();
+                    this.unfollow();
                 }
             });
 
-        this.active_signals = [
-            window.connect('size-changed', on_window_changed),
-            window.connect('position-changed', on_window_changed),
+        this.followed = [
+            window.meta,
+            window.meta.connect('size-changed', on_window_changed),
+            window.meta.connect('position-changed', on_window_changed),
         ];
     }
 
-    /** Disconnects signals from the active window in the stack */
-    private active_disconnect() {
-        const active_meta = this.active_meta();
-
-        if (this.active_signals && active_meta) {
-            for (const s of this.active_signals) active_meta.disconnect(s);
+    /** Disconnects from the window that the tab bar follows */
+    private unfollow() {
+        if (this.followed) {
+            const [meta, ...signals] = this.followed;
+            for (const signal of signals) meta.disconnect(signal);
         }
 
-        this.active_signals = null;
+        this.followed = null;
     }
 
     private active_meta(): Meta.Window | undefined {
@@ -344,20 +393,17 @@ export class Stack {
         }
     }
 
-    /** Clears watched tabs and removes all tabs */
-    clear() {
-        this.active_disconnect();
-        for (const c of this.tabs.splice(0)) this.tab_disconnect(c);
-        this.widgets?.tabs.destroy_all_children();
-        this.buttons.truncate(0);
+    /** Disconnects a tab from the stack, and fades its window back in if the stack is on the active workspace */
+    tab_disconnect(c: Tab) {
+        this.unwatch(c);
+        if (this.workspace === this.ext.active_workspace()) this.ext.windows.get(c.entity)?.fade_in();
     }
 
-    /** Disconnects a tab from the stack */
-    tab_disconnect(c: Tab) {
+    /** Disconnects the signals of a tab, without changing whether its window is shown */
+    private unwatch(c: Tab) {
         const window = this.ext.windows.get(c.entity);
         if (window) {
             for (const s of c.signals) window.meta.disconnect(s);
-            if (this.workspace === this.ext.active_workspace()) window.fade_in();
         }
 
         c.signals = [];
@@ -371,29 +417,14 @@ export class Stack {
         }
     }
 
-    /** Deactivate the signals belonging to an entity */
-    deactivate(w: ShellWindow) {
-        for (const c of this.tabs)
-            if (Ecs.entity_eq(c.entity, w.entity)) {
-                this.tab_disconnect(c);
-            }
-
-        if (this.active_signals && Ecs.entity_eq(this.active, w.entity)) {
-            this.active_disconnect();
-        }
-    }
-
     /** Disconnects this stack's signal, and destroys its widgets */
     destroy() {
         global.display.disconnect(this.restacker);
         global.display.disconnect(this.focus_watcher);
-        this.active_disconnect();
+        this.unfollow();
 
-        // Disconnect stack signals from each window, and unhide them.
-        for (const c of this.tabs) {
-            this.tab_disconnect(c);
-            if (this.workspace === this.ext.active_workspace()) this.ext.windows.get(c.entity)?.fade_in();
-        }
+        // Disconnect stack signals from each window, which also unhides them
+        for (const c of this.tabs) this.tab_disconnect(c);
 
         for (const b of this.buttons.values()) {
             b.destroy();
@@ -436,30 +467,21 @@ export class Stack {
 
             this.tabs_destroy = this.widgets.tabs.connect('destroy', () => this.recreate_widgets());
 
-            this.active_disconnect();
-
-            for (const c of this.tabs.splice(0)) {
-                this.tab_disconnect(c);
+            // Only the buttons are rebuilt, and the windows stay as they are
+            const tabs = this.tabs.splice(0);
+            for (const c of tabs) this.unwatch(c);
+            this.buttons.truncate(0);
+            for (const c of tabs) {
                 const window = this.ext.windows.get(c.entity);
-                if (window) this.add(window);
+                if (window) this.add_tab(window);
             }
 
             this.update_positions(this.rect);
             this.restack();
-
-            const window = this.ext.windows.get(this.active);
-            if (!window) return;
-
-            this.active_reconnect(window.meta);
         }
     }
 
-    remove_by_pos(idx: number) {
-        const c = this.tabs[idx];
-        if (c) this.remove_tab_component(c, idx);
-    }
-
-    remove_tab_component(c: Tab, idx: number) {
+    private remove_tab_component(c: Tab, idx: number) {
         if (!this.widgets) return;
 
         this.tab_disconnect(c);
@@ -475,65 +497,6 @@ export class Stack {
         this.update_focus();
     }
 
-    /** Removes the tab associated with the entity */
-    remove_tab(entity: Entity): number | null {
-        if (!this.widgets) return null;
-
-        if (this.prev_active && Ecs.entity_eq(entity, this.prev_active)) {
-            this.prev_active = null;
-            this.prev_active_id = 0;
-        }
-        const was_active = Ecs.entity_eq(entity, this.active);
-
-        let idx = 0;
-        for (const c of this.tabs) {
-            if (Ecs.entity_eq(c.entity, entity)) {
-                this.remove_tab_component(c, idx);
-
-                // Adjust further indices
-                if (this.active_id > idx) this.active_id -= 1;
-                if (this.prev_active_id > idx) this.prev_active_id -= 1;
-                if (this.tabs.length) {
-                    if (this.active_id >= this.tabs.length) this.active_id = this.tabs.length - 1;
-                    if (this.prev_active_id >= this.tabs.length) this.prev_active_id = this.tabs.length - 1;
-                }
-
-                if (was_active && this.prev_active && this.tabs.length) {
-                    // Go to prev_active tab if current tab closed
-                    this.activate(this.prev_active);
-                    // Don't hold a reference to this removed tab
-                    this.prev_active = null;
-                    this.prev_active_id = 0;
-                }
-
-                return idx;
-            }
-            idx += 1;
-        }
-
-        return null;
-    }
-
-    replace(window: ShellWindow) {
-        if (!this.widgets) return;
-        const tab = this.tabs[this.active_id];
-        const actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
-        if (tab && actor) {
-            this.tab_disconnect(tab);
-
-            if (Ecs.entity_eq(window.entity, this.active)) {
-                this.active_connect(window.meta, window.entity);
-                window.fade_in();
-            } else {
-                window.fade_out();
-            }
-
-            this.watch_signals(tab, window);
-            this.buttons.get(tab.button)?.set_title(window.title());
-            this.activate(window.entity);
-        }
-    }
-
     /** Repositions the stack, arranging the stack's actors around the active window */
     reposition() {
         if (!this.widgets) return;
@@ -543,11 +506,9 @@ export class Stack {
 
         const actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
         if (!actor) {
-            this.active_disconnect();
+            this.unfollow();
             return;
         }
-
-        window.fade_in();
 
         const parent = actor.get_parent();
 
@@ -586,27 +547,10 @@ export class Stack {
         return window ? window.located_on_workspace(active) : this.workspace === active.index();
     }
 
-    reset_visibility(permitted: boolean) {
-        let idx = 0;
-
-        for (const c of this.tabs) {
-            this.window_exec(c, c.entity, window => {
-                if (this.active_id === idx) {
-                    if (permitted) {
-                        window.fade_in();
-                    } else {
-                        window.restore_opacity();
-                    }
-                } else {
-                    window.fade_out();
-                }
-            });
-
-            idx += 1;
-        }
-    }
-
-    /** Repositions the stack, and hides all but the active window in the stack */
+    /**
+     * Places the tab bar, and shows it only where the stack may show. It also shows the active tab's
+     * window and hides the others again, as mutter shows every window of a workspace on entering it.
+     */
     restack() {
         this.on_grab(() => {
             if (!this.widgets) return;
@@ -617,7 +561,7 @@ export class Stack {
 
             if (permitted) this.reposition();
 
-            this.reset_visibility(permitted);
+            this.show_active([]);
         });
     }
 
@@ -679,17 +623,8 @@ export class Stack {
         tab.button_signal = widget.connect('clicked', () => {
             this.activate(entity);
             this.window_exec(tab, entity, window => {
-                if (!window.actor_exists()) return;
-
-                window.fade_in();
                 this.ext.register_fn(() => window.request_activate(false));
-
                 this.reposition();
-
-                for (const comp of this.tabs) {
-                    this.buttons.get(comp.button)?.set_active(TabActive.inactive);
-                }
-                widget.set_active(TabActive.active);
             });
         });
 

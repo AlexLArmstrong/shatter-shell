@@ -811,7 +811,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                 const prev_window = this.windows.get(prev);
                 if (prev_window) {
                     if (prev_window.stack !== stack) {
-                        stack_object.auto_activate();
                         this.prev_focused = [null, stack_object.active];
                         this.windows.get(stack_object.active)?.request_activate();
                     }
@@ -1374,11 +1373,10 @@ export class Ext extends Ecs.System<ExtEvent> {
                             if (stack) {
                                 const stack_info = tiler.find_stack(stack.active);
                                 if (stack_info) {
-                                    const node: node.NodeStack = stack_info[1].inner;
+                                    const stack_node: node.NodeStack = stack_info[1].inner;
 
-                                    node.entities.push(win.entity);
-                                    tiler.update_stack(this, node);
                                     tiler.forest.on_attach(win.entity);
+                                    node.stack_insert(this, stack_node, win.entity, true);
                                     stack.activate(win.entity);
                                     tiler.tile(this, fork, fork.area);
                                     return;

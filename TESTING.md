@@ -50,6 +50,9 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Windows can be moved into a stack.
 - [ ] Windows can be moved out of a stack.
 - [ ] Windows inside and outside of a stack can be swapped multiple times and in both directions.
+- [ ] Closing the active tab returns to the tab that was active before it, and swapping the active tab with a window outside the stack makes that window the active tab.
+- [ ] Moving a tab left or right with the keyboard keeps it active, and moving it past either end takes it out of the stack.
+- [ ] Swapping a stacked window, moving a tab, or a new window joining a stack never shows two of the stack's windows at once, not even for a frame.
 - [ ] Moving the last window out of a stack works as expected.
 - [ ] Quickly switching tabs and then closing or moving one never leaves a window that only appears in the overview and workspace animations.
 - [ ] Moving the last window off a workspace, or removing a workspace, never leaves another workspace's window drawn on the current one, where it can be seen but not used. Check by entering an empty workspace afterwards.
