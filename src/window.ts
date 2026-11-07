@@ -78,6 +78,9 @@ export class ShellWindow {
      */
     private fade_id = 0;
 
+    /** Whether the latest of those decisions hides the window, once its fade completes */
+    private fade_hides = false;
+
     constructor(entity: Entity, window: Meta.Window, window_app: Shell.App, ext: Ext) {
         this.window_app = window_app;
 
@@ -141,8 +144,9 @@ export class ShellWindow {
     }
 
     /** Records a new decision about whether the window is drawn, superseding any running fade */
-    private next_fade(): number {
+    private next_fade(hides: boolean): number {
         this.fade_id += 1;
+        this.fade_hides = hides;
         return this.fade_id;
     }
 
@@ -166,7 +170,7 @@ export class ShellWindow {
             return;
         }
 
-        this.next_fade();
+        this.next_fade(false);
 
         if (actor.visible && actor.opacity >= 255) {
             // A fade-out that has only just started still reads as fully opaque. Stop it.
@@ -189,7 +193,7 @@ export class ShellWindow {
     fade_out() {
         const actor = this.actor();
         if (!actor) return;
-        const id = this.next_fade();
+        const id = this.next_fade(true);
         if (!actor.visible) return;
 
         actor.remove_all_transitions();
@@ -210,7 +214,7 @@ export class ShellWindow {
         const actor = this.actor();
         if (!actor) return;
 
-        this.next_fade();
+        this.next_fade(false);
         actor.remove_all_transitions();
         actor.opacity = 255;
         if (this.can_show()) actor.show();
@@ -221,7 +225,7 @@ export class ShellWindow {
         const actor = this.actor();
         if (!actor) return;
 
-        this.next_fade();
+        this.next_fade(true);
         actor.remove_all_transitions();
         actor.hide();
         actor.opacity = 255;
@@ -232,14 +236,27 @@ export class ShellWindow {
         const actor = this.actor();
         if (!actor) return;
 
-        this.next_fade();
+        this.next_fade(false);
         actor.remove_transition('opacity');
         actor.opacity = 255;
     }
 
-    /** Stops every transition on the window, such as before moving it */
+    /**
+     * Stops every transition on the window, such as before moving it, and applies the outcome that a
+     * fade cut short would have had, rather than leaving the window half transparent. This goes by
+     * the latest decision rather than the opacity, as a fade-out that has just started is still opaque.
+     */
     settle() {
-        this.actor()?.remove_all_transitions();
+        const actor = this.actor();
+        if (!actor) return;
+
+        actor.remove_all_transitions();
+
+        if (this.fade_hides) {
+            if (actor.visible) this.hide_now();
+        } else if (actor.opacity < 255) {
+            this.restore_opacity();
+        }
     }
 
     bind_window_events() {
