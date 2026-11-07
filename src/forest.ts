@@ -344,7 +344,9 @@ export class Forest extends Ecs.World {
 
     /** Create a new top level fork */
     create_toplevel(window: Entity, area: Mtk.Rectangle, id: MonitorWorkspaceID): [Entity, Fork.Fork] {
-        const [entity, fork] = this.create_fork(Node.Node.window(window), null, area, new Fork.Root(id[0], id[1]));
+        const manager = global.workspace_manager;
+        const workspace = manager.get_workspace_by_index(id[1]) ?? manager.get_active_workspace();
+        const [entity, fork] = this.create_fork(Node.Node.window(window), null, area, new Fork.Root(id[0], workspace));
         fork.is_toplevel = true;
 
         return [entity, fork];
@@ -449,10 +451,7 @@ export class Forest extends Ecs.World {
     find_toplevel([src_mon, src_work]: MonitorWorkspaceID): Entity | null {
         for (const [entity, fork] of this.forks.iter()) {
             if (!fork.is_toplevel) continue;
-            const { monitor, workspace } = fork;
-            if (monitor == src_mon && workspace == src_work) {
-                return entity;
-            }
+            if (fork.monitor == src_mon && fork.root.is_on(src_work)) return entity;
         }
 
         return null;

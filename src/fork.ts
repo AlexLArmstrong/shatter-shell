@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Meta from 'gi://Meta';
 import Mtk from 'gi://Mtk';
 
 import type { Entity } from './ecs.js';
@@ -6,6 +7,7 @@ import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Node } from './node.js';
 
+import { workspaceID } from './lib.js';
 import * as node from './node.js';
 import { ShellWindow } from './window.js';
 const { NodeKind } = node;
@@ -21,13 +23,36 @@ const HEIGHT = 'height' as const;
  */
 export class Root {
     monitor: MonitorID;
-    workspace: WorkspaceID;
+
+    /**
+     * The workspace that the tree is on. This is mutter's own workspace rather than its index, as
+     * mutter renumbers the workspaces whenever one before it is removed or they're reordered, and the
+     * tree must stay where it is. Once its workspace has been removed, it's only compared, never
+     * asked anything, until the tree's windows have moved on.
+     */
+    workspace: Meta.Workspace;
+
     on_primary_display: boolean;
 
-    constructor(monitor: MonitorID, workspace: WorkspaceID) {
+    constructor(monitor: MonitorID, workspace: Meta.Workspace) {
         this.monitor = monitor;
         this.workspace = workspace;
         this.on_primary_display = global.display.get_primary_monitor() === monitor;
+    }
+
+    /** Whether the tree's workspace still exists, rather than having been removed */
+    workspace_exists(): boolean {
+        const manager = global.workspace_manager;
+        for (let idx = 0; idx < manager.get_n_workspaces(); idx += 1) {
+            if (manager.get_workspace_by_index(idx) === this.workspace) return true;
+        }
+
+        return false;
+    }
+
+    /** Whether the tree is on this workspace, given by its index as it is now */
+    is_on(workspace: WorkspaceID): boolean {
+        return global.workspace_manager.get_workspace_by_index(workspace) === this.workspace;
     }
 }
 
@@ -81,13 +106,15 @@ export class Fork {
         this.orientation = orientation;
     }
 
-    /** The tree's workspace */
+    /** The index of the tree's workspace as it is now, or -1 if it has been removed */
     get workspace(): WorkspaceID {
-        return this.root.workspace;
+        return workspaceID(this.root.workspace_exists() ? this.root.workspace.index() : -1);
     }
 
+    /** Moves the tree to the workspace that has this index now */
     set workspace(workspace: WorkspaceID) {
-        this.root.workspace = workspace;
+        const found = global.workspace_manager.get_workspace_by_index(workspace);
+        if (found) this.root.workspace = found;
     }
 
     /** The tree's monitor */

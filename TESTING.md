@@ -67,6 +67,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 
 ### Workspaces
 
+- [ ] Removing a workspace in the middle, and reordering workspaces by dragging them in the overview, keeps the windows of every other workspace tiled together, and new windows on any of them tile with that workspace's windows. Check with static workspaces too.
 - [ ] Windows can be moved to another workspace with the keyboard
 - [ ] Windows can be moved to another workspace with the mouse
 - [ ] Windows can be moved to workspaces between existing workspaces
