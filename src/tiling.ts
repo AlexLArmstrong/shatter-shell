@@ -453,7 +453,7 @@ export class Tiler {
                 resize(mov1, callback);
                 resize(mov2, callback);
 
-                ext.auto_tiler.forest.arrange(ext, fork.workspace);
+                ext.auto_tiler.forest.arrange(ext);
 
                 ext.register_fn(() => ext.set_overlay(window.rect()));
             }

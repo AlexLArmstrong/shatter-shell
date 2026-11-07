@@ -120,13 +120,13 @@ export class Forest extends Ecs.World {
     }
 
     /** Measures and arranges windows in the tree from the given fork to the specified area. */
-    tile(ext: Ext, fork: Fork.Fork, area: Mtk.Rectangle, ignore_reset: boolean = true) {
+    tile(ext: Ext, fork: Fork.Fork, area: Mtk.Rectangle) {
         this.measure(ext, fork, area);
-        this.arrange(ext, fork.workspace, ignore_reset);
+        this.arrange(ext);
     }
 
     /** Place all windows into their calculated positions. */
-    arrange(ext: Ext, _workspace: WorkspaceID, _ignore_reset: boolean = false) {
+    arrange(ext: Ext) {
         for (const [entity, r] of this.requested) {
             const window = ext.windows.get(entity);
             if (!window) continue;

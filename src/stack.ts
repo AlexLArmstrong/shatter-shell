@@ -6,7 +6,6 @@ import type { ShellWindow } from './window.js';
 
 import * as a from './arena.js';
 import * as Ecs from './ecs.js';
-import { workspaceID } from './lib.js';
 import * as Node from './node.js';
 
 const Arena = a.Arena;
@@ -164,9 +163,6 @@ export class Stack {
     /** The window whose position and size the tab bar follows, with its signals */
     private followed: [Meta.Window, SignalID, SignalID] | null = null;
 
-    /** The workspace that the stack was created on, for until its active window has one. */
-    private initial_workspace: WorkspaceID;
-
     buttons: a.Arena<typeof TabButton.prototype> = new Arena();
 
     tab_height: number;
@@ -182,10 +178,9 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, node: NodeStack, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeStack) {
         this.ext = ext;
         this.node = node;
-        this.initial_workspace = workspace;
         this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.dpi;
         this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.dpi;
 
@@ -528,20 +523,11 @@ export class Stack {
         }
     }
 
-    /**
-     * The workspace that the stack is on, which is that of its active window. It's read from mutter
-     * rather than stored, so that it can't go stale when workspaces are added, removed or moved.
-     */
-    get workspace(): WorkspaceID {
-        const workspace = this.active_meta()?.get_workspace();
-        return workspace ? workspaceID(workspace.index()) : this.initial_workspace;
-    }
-
     /** Whether the stack is permitted to show on the active workspace. */
     permitted_to_show(): boolean {
         const active = global.workspace_manager.get_active_workspace();
         const window = this.active_meta();
-        return window ? window.located_on_workspace(active) : this.workspace === active.index();
+        return window?.located_on_workspace(active) ?? false;
     }
 
     /**

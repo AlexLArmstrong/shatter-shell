@@ -1106,7 +1106,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                         if (this.movement_is_valid(win, movement)) {
                             forest.resize(this, fork_entity, fork, win.entity, movement, crect);
-                            forest.arrange(this, fork.workspace);
+                            forest.arrange(this);
                         } else {
                             forest.tile(this, fork, fork.area);
                         }

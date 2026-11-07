@@ -49,7 +49,6 @@ export class ShellWindow {
     entity: Entity;
     meta: Meta.Window;
     ext: Ext;
-    known_workspace: WorkspaceID;
     grab: boolean = false;
     activate_after_move: boolean = false;
     was_attached_to?: [Entity, boolean | number];
@@ -97,8 +96,6 @@ export class ShellWindow {
         this.entity = entity;
         this.meta = window;
         this.ext = ext;
-
-        this.known_workspace = this.workspace_id();
 
         this.bind_window_events();
         this.bind_hint_events();
