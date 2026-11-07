@@ -3,6 +3,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
+import type { Fork } from './fork.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
@@ -31,12 +32,16 @@ function node_kind_as_string(kind: NodeKind): string {
 export interface NodeFork {
     kind: NodeKind.FORK;
     entity: Entity;
+    /** The fork whose branch this is, kept by {@link Fork} */
+    parent: Fork | null;
 }
 
 /** Identifies this node as a window */
 export interface NodeWindow {
     kind: NodeKind.WINDOW;
     entity: Entity;
+    /** The fork whose branch this is, kept by {@link Fork} */
+    parent: Fork | null;
 }
 
 export interface NodeStack {
@@ -44,10 +49,44 @@ export interface NodeStack {
     idx: number;
     entities: Array<Entity>;
     rect: Mtk.Rectangle | null;
+    /** The fork whose branch this is, kept by {@link Fork} */
+    parent: Fork | null;
+}
+
+/** Puts a window into the stack's leaf, at its front or its back */
+export function stack_add(node: NodeStack, window: Entity, front = false) {
+    if (front) {
+        node.entities.unshift(window);
+    } else {
+        node.entities.push(window);
+    }
+    node.parent?.hold_window(node, window);
+}
+
+/** Puts a window in place of the one at `idx` in the stack's leaf */
+export function stack_set(node: NodeStack, idx: number, window: Entity) {
+    const previous = node.entities[idx];
+    node.entities[idx] = window;
+    node.parent?.hold_window(node, window);
+    if (previous) node.parent?.let_go_window(node, previous);
+}
+
+/** Takes the window at `idx` out of the stack's leaf */
+function stack_take(node: NodeStack, idx: number) {
+    const [window] = node.entities.splice(idx, 1);
+    if (window) node.parent?.let_go_window(node, window);
+}
+
+/** Puts a window in place of the one in the leaf */
+export function window_set(node: NodeWindow, window: Entity) {
+    const previous = node.entity;
+    node.entity = window;
+    node.parent?.hold_window(node, window);
+    node.parent?.let_go_window(node, previous);
 }
 
 function stack_detach(node: NodeStack, stack: Stack, idx: number) {
-    node.entities.splice(idx, 1);
+    stack_take(node, idx);
     stack.remove_by_pos(idx);
 }
 
@@ -132,7 +171,7 @@ export function stack_remove(forest: Forest, node: NodeStack, entity: Entity) {
     const stack = forest.stacks.get(node.idx);
     if (!stack) return null;
     const idx = stack.remove_tab(entity);
-    if (idx !== null) node.entities.splice(idx, 1);
+    if (idx !== null) stack_take(node, idx);
     return idx;
 }
 
@@ -141,6 +180,9 @@ function stack_swap(node: NodeStack, from: number, to: number) {
     node.entities[from] = node.entities[to]!;
     node.entities[to] = tmp!;
 }
+
+/** A leaf of the tree, which holds one window or a stack of them */
+export type NodeLeaf = NodeWindow | NodeStack;
 
 export type NodeADT = NodeFork | NodeWindow | NodeStack;
 
@@ -155,12 +197,12 @@ export class Node<T extends NodeADT = NodeADT> {
 
     /** Create a fork variant of a `Node` */
     static fork(entity: Entity): Node<NodeFork> {
-        return new Node({ kind: NodeKind.FORK, entity });
+        return new Node({ kind: NodeKind.FORK, entity, parent: null });
     }
 
     /** Create the window variant of a `Node` */
     static window(entity: Entity): Node<NodeWindow> {
-        return new Node({ kind: NodeKind.WINDOW, entity });
+        return new Node({ kind: NodeKind.WINDOW, entity, parent: null });
     }
 
     static stacked(window: Entity, idx: number): Node<NodeStack> {
@@ -169,6 +211,7 @@ export class Node<T extends NodeADT = NodeADT> {
             entities: [window],
             idx,
             rect: null,
+            parent: null,
         });
     }
 
@@ -185,6 +228,11 @@ export class Node<T extends NodeADT = NodeADT> {
                 break;
         }
         return fmt;
+    }
+
+    /** Whether this is a leaf that holds the window, either on its own or in a stack */
+    has(entity: Entity): boolean {
+        return this.is_window(entity) || this.is_in_stack(entity);
     }
 
     /** Check if the entity exists as a child of this stack */

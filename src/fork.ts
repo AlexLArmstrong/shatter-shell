@@ -4,7 +4,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
-import type { Node } from './node.js';
+import type { Node, NodeLeaf } from './node.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
@@ -17,13 +17,26 @@ const YPOS = 'y' as const;
 const WIDTH = 'width' as const;
 const HEIGHT = 'height' as const;
 
+/** The links back up a tree, which its forks keep in step with their branches */
+export interface TreeLinks {
+    /** The fork with this entity */
+    fork(entity: Entity): Fork | null;
+
+    /** The leaf that holds each tiled window */
+    readonly leaves: Ecs.Storage<NodeLeaf>;
+}
+
 /** A tiling fork contains two children nodes.
  *
  * These nodes may either be windows, or sub-forks.
  */
 export class Fork {
-    left: Node;
-    right: Node | null;
+    private _left: Node;
+    private _right: Node | null;
+
+    /** The fork whose branch this one is, if it isn't the top of its tree */
+    parent: Fork | null = null;
+
     area: Mtk.Rectangle;
     entity: Entity;
     on_primary_display: boolean;
@@ -44,6 +57,7 @@ export class Fork {
     private n_toggled: number = 0;
 
     constructor(
+        private readonly links: TreeLinks,
         entity: Entity,
         left: Node,
         right: Node | null,
@@ -54,14 +68,92 @@ export class Fork {
     ) {
         this.on_primary_display = global.display.get_primary_monitor() === monitor;
         this.area = area;
-        this.left = left;
-        this.right = right;
+        this._left = left;
+        this._right = right;
+        this.hold(left);
+        if (right) this.hold(right);
         this.workspace = workspace;
         this.length_left = orientation === Clutter.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
         this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orientation;
         this.monitor = monitor;
+    }
+
+    get left(): Node {
+        return this._left;
+    }
+
+    set left(branch: Node) {
+        const previous = this._left;
+        this._left = branch;
+        this.replaced(previous, branch);
+    }
+
+    get right(): Node | null {
+        return this._right;
+    }
+
+    set right(branch: Node | null) {
+        const previous = this._right;
+        this._right = branch;
+        this.replaced(previous, branch);
+    }
+
+    /** Lets go of everything the fork held, as it leaves its tree */
+    leave() {
+        this.let_go(this._left);
+        if (this._right) this.let_go(this._right);
+    }
+
+    /** Records that the window is in this fork's leaf */
+    hold_window(leaf: NodeLeaf, window: Entity) {
+        this.links.leaves.insert(window, leaf);
+    }
+
+    /** Forgets that the window is in the leaf, unless it has moved to another leaf since */
+    let_go_window(leaf: NodeLeaf, window: Entity) {
+        if (this.links.leaves.get(window) === leaf) this.links.leaves.remove(window);
+    }
+
+    private replaced(previous: Node | null, branch: Node | null) {
+        if (branch) this.hold(branch);
+        if (previous && previous !== this._left && previous !== this._right) this.let_go(previous);
+    }
+
+    private hold(branch: Node) {
+        const inner = branch.inner;
+        inner.parent = this;
+        switch (inner.kind) {
+            case NodeKind.FORK:
+                const child = this.links.fork(inner.entity);
+                if (child) child.parent = this;
+                break;
+            case NodeKind.WINDOW:
+                this.hold_window(inner, inner.entity);
+                break;
+            case NodeKind.STACK:
+                for (const window of inner.entities) this.hold_window(inner, window);
+                break;
+        }
+    }
+
+    private let_go(branch: Node) {
+        const inner = branch.inner;
+        if (inner.parent !== this) return;
+        inner.parent = null;
+        switch (inner.kind) {
+            case NodeKind.FORK:
+                const child = this.links.fork(inner.entity);
+                if (child?.parent === this) child.parent = null;
+                break;
+            case NodeKind.WINDOW:
+                this.let_go_window(inner, inner.entity);
+                break;
+            case NodeKind.STACK:
+                for (const window of inner.entities) this.let_go_window(inner, window);
+                break;
+        }
     }
 
     /** The calculated left area of this fork */
@@ -139,7 +231,7 @@ export class Fork {
                 const inner = this.right.inner;
                 if (inner.kind === NodeKind.WINDOW) {
                     closure = () => {
-                        inner.entity = b.entity;
+                        node.window_set(inner, b.entity);
                     };
                 } else if (inner.kind === NodeKind.STACK) {
                     const idx = node.stack_find(inner, a.entity);
@@ -150,7 +242,7 @@ export class Fork {
 
                     closure = () => {
                         node.stack_replace(ext, inner, b);
-                        inner.entities[idx] = b.entity;
+                        node.stack_set(inner, idx, b.entity);
                     };
                 }
             }
@@ -164,7 +256,7 @@ export class Fork {
                 const inner = this.left.inner;
                 if (Ecs.entity_eq(inner.entity, a.entity)) {
                     closure = () => {
-                        inner.entity = b.entity;
+                        node.window_set(inner, b.entity);
                     };
                 } else {
                     check_right();
@@ -178,7 +270,7 @@ export class Fork {
                     const id = idx;
                     closure = () => {
                         node.stack_replace(ext, inner_s, b);
-                        inner_s.entities[id] = b.entity;
+                        node.stack_set(inner_s, id, b.entity);
                     };
                 } else {
                     check_right();

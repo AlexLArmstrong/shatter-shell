@@ -410,11 +410,9 @@ export class Ext extends Ecs.System<ExtEvent> {
     find_unused_workspace(monitor: MonitorID): [WorkspaceID, Meta.Workspace | null] {
         if (!this.gnome_forest) return [0, wom.get_workspace_by_index(0)];
 
-        // Workspaces used by the monitor's tiled windows that aren't being moved
+        // The workspaces of the tiled windows on the monitor that stay where they are
         const occupied: WorkspaceID[] = [];
         for (const [entity] of this.gnome_forest.attached.iter()) {
-            if (!this.gnome_forest.attached.contains(entity)) continue;
-
             const win = this.windows.get(entity);
 
             if (win && !win.reassignment && win.monitor_id() === monitor) occupied.push(win.workspace_id());
@@ -704,18 +702,13 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    on_tile_attach(entity: Entity, window: Entity) {
-        if (this.gnome_forest) {
-            if (!this.gnome_forest.attached.contains(window)) {
-                this.windows.with(window, w => {
-                    if (w.prev_rect === null) {
-                        w.prev_rect = w.meta.get_frame_rect();
-                    }
-                });
+    /** Remembers where a window was before it was first tiled, to put it back there when it's untiled */
+    on_tile_attach(window: Entity) {
+        this.windows.with(window, w => {
+            if (w.prev_rect === null) {
+                w.prev_rect = w.meta.get_frame_rect();
             }
-
-            this.gnome_forest.attached.insert(window, entity);
-        }
+        });
     }
 
     on_tile_detach(win: Entity) {
@@ -852,12 +845,12 @@ export class Ext extends Ecs.System<ExtEvent> {
                             if (stack) {
                                 const stack_info = gnome_forest.find_stack(stack.active);
                                 if (stack_info) {
-                                    const node: node.NodeStack = stack_info[1].inner;
+                                    const leaf: node.NodeStack = stack_info[1].inner;
 
                                     win.stack = attachment;
-                                    node.entities.push(win.entity);
-                                    gnome_forest.update_stack(node);
-                                    gnome_forest.forest.on_attach(fork.entity, win.entity);
+                                    node.stack_add(leaf, win.entity);
+                                    gnome_forest.update_stack(leaf);
+                                    gnome_forest.forest.on_attach(win.entity);
                                     stack.activate(win.entity);
                                     gnome_forest.tile(fork, fork.area);
                                     return;

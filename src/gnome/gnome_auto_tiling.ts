@@ -1,6 +1,5 @@
 import type Meta from 'gi://Meta';
 
-import type { Entity } from '../ecs.js';
 import type { Ext } from '../extension.js';
 import type { ExtensionSettings } from '../settings.js';
 
@@ -22,7 +21,6 @@ export class GnomeAutoTiling {
             new Forest()
                 .connect_on_attach(ext.on_tile_attach.bind(ext))
                 .connect_on_detach(ext.on_tile_detach.bind(ext)),
-            ext.register_storage<Entity>(),
         );
     }
 
@@ -47,7 +45,6 @@ export class GnomeAutoTiling {
 
         if (!ext.gnome_forest) return;
 
-        ext.unregister_storage(ext.gnome_forest.attached);
         ext.gnome_forest.destroy();
         ext.gnome_forest = null;
         settings.set_tile_by_default(false);

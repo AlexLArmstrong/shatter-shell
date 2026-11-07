@@ -19,18 +19,37 @@ const { NodeKind } = node;
 import { Log } from '../log.js';
 import { Tags } from '../tags.js';
 
+/** Which fork holds each tiled window */
+export class Attachments {
+    constructor(private readonly forest: Forest) {}
+
+    /** The fork that holds the window's leaf, if it's tiled */
+    get(window: Entity): Entity | null {
+        return this.forest.fork_of(window);
+    }
+
+    /** Whether the window is tiled */
+    contains(window: Entity): boolean {
+        return this.get(window) !== null;
+    }
+
+    /** Every tiled window, with the fork that holds its leaf */
+    iter(): Generator<[Entity, Entity], void> {
+        return this.forest.tiled();
+    }
+}
+
 /** The GNOME side of the Forest: tiles windows into its trees and lays them out, while auto-tiling is on */
 export class GnomeForest {
     forest: Forest;
-    attached: ecs.Storage<Entity>;
+    readonly attached: Attachments;
 
     constructor(
         private readonly ext: Ext,
         forest: Forest,
-        attached: ecs.Storage<Entity>,
     ) {
         this.forest = forest;
-        this.attached = attached;
+        this.attached = new Attachments(forest);
     }
 
     /** Swap window associations in the auto-tiler
@@ -78,10 +97,8 @@ export class GnomeForest {
         }
 
         const a_fn = a_fork.replace_window(this.ext, a_win, b_win);
-        this.forest.on_attach(a_ent, b);
 
         const b_fn = b_fork.replace_window(this.ext, b_win, a_win);
-        this.forest.on_attach(b_ent, a);
 
         if (a_fn) a_fn();
         if (b_fn) b_fn();
@@ -131,8 +148,8 @@ export class GnomeForest {
             rect.height -= this.ext.sizes.gap_outer * 2;
         }
 
-        const [entity, fork] = this.forest.create_toplevel(win.entity, rect.copy(), workspace_id);
-        this.forest.on_attach(entity, win.entity);
+        const [, fork] = this.forest.create_toplevel(win.entity, rect.copy(), workspace_id);
+        this.forest.on_attach(win.entity);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
 
@@ -247,7 +264,8 @@ export class GnomeForest {
     detach_window(win: Entity) {
         const stack = this.find_stack(win)?.[1].inner;
 
-        this.attached.take_with(win, prev_fork => {
+        const prev_fork = this.attached.get(win);
+        if (prev_fork) {
             const reflow_fork = this.forest.detach(this.ext, prev_fork, win);
 
             if (reflow_fork) {
@@ -262,7 +280,7 @@ export class GnomeForest {
             }
 
             this.ext.windows.with(win, info => (info.ignore_detach = false));
-        });
+        }
 
         if (stack?.kind === NodeKind.STACK) this.dissolve_single_stack(stack);
     }
@@ -296,8 +314,8 @@ export class GnomeForest {
                         const sibling = this.ext.windows.get(fork.right.inner.entity);
                         if (sibling && sibling.frame().contains_rect(cursor)) {
                             if (swap) {
-                                fork.left.inner.entity = fork.right.inner.entity;
-                                fork.right.inner.entity = win;
+                                node.window_set(fork.left.inner, fork.right.inner.entity);
+                                node.window_set(fork.right.inner, win);
 
                                 this.tile(fork, fork.area);
                             }
@@ -308,8 +326,8 @@ export class GnomeForest {
                         const sibling = this.ext.windows.get(fork.left.inner.entity);
                         if (sibling && sibling.frame().contains_rect(cursor)) {
                             if (swap) {
-                                fork.right.inner.entity = fork.left.inner.entity;
-                                fork.left.inner.entity = win;
+                                node.window_set(fork.right.inner, fork.left.inner.entity);
+                                node.window_set(fork.left.inner, win);
 
                                 this.tile(fork, fork.area);
                             }
