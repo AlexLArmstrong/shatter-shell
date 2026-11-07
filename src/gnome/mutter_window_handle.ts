@@ -48,7 +48,6 @@ export class MutterWindowHandle implements WindowHandle {
     entity: Entity;
     meta: Meta.Window;
     ext: Ext;
-    known_workspace: WorkspaceID;
     grab: boolean = false;
     activate_after_move: boolean = false;
     ignore_detach: boolean = false;
@@ -86,8 +85,6 @@ export class MutterWindowHandle implements WindowHandle {
         this.meta = window;
         this.ext = ext;
         this.visibility = new GnomeVisibility(window);
-
-        this.known_workspace = this.workspace_id();
 
         this.bind_window_events();
         this.bind_hint_events();

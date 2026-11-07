@@ -455,7 +455,7 @@ export class GnomeTilingMode {
                 resize(mov1, callback);
                 resize(mov2, callback);
 
-                this.ext.gnome_forest.forest.arrange(this.ext, fork.workspace);
+                this.ext.gnome_forest.forest.arrange(this.ext);
 
                 this.ext.register_fn(() => this.ext.set_overlay(window.frame()));
             }

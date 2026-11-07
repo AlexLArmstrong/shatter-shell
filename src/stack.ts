@@ -6,7 +6,6 @@ import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
 import * as Ecs from './ecs.js';
-import { workspaceID } from './lib.js';
 import * as Node from './node.js';
 
 const Arena = a.Arena;
@@ -164,9 +163,6 @@ export class Stack {
     /** The window whose position and size the tab bar follows, with its signals */
     private followed: [Meta.Window, SignalID, SignalID] | null = null;
 
-    /** The workspace that the stack was created on, for until its active window has one. */
-    private initial_workspace: WorkspaceID;
-
     buttons: a.Arena<typeof TabButton.prototype> = new Arena();
 
     tab_height: number;
@@ -182,10 +178,9 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, node: NodeStack, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeStack) {
         this.ext = ext;
         this.node = node;
-        this.initial_workspace = workspace;
         this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.sizes.scale;
         this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.sizes.scale;
 
@@ -387,7 +382,8 @@ export class Stack {
     /** Disconnects a tab from the stack, and fades its window back in if the stack is on the active workspace */
     tab_disconnect(c: Tab) {
         this.unwatch(c);
-        if (this.workspace === this.ext.active_workspace()) this.ext.windows.get(c.entity)?.visibility.fade_in();
+        const active = global.workspace_manager.get_active_workspace();
+        if (this.active_meta()?.get_workspace() === active) this.ext.windows.get(c.entity)?.visibility.fade_in();
     }
 
     /** Disconnects the signals of a tab, without changing whether its window is shown */
@@ -522,17 +518,11 @@ export class Stack {
         }
     }
 
-    /** The workspace that the stack is on, which is that of its active window */
-    get workspace(): WorkspaceID {
-        const workspace = this.active_meta()?.get_workspace();
-        return workspace ? workspaceID(workspace.index()) : this.initial_workspace;
-    }
-
     /** Whether the stack is permitted to show on the active workspace. */
     permitted_to_show(): boolean {
         const active = global.workspace_manager.get_active_workspace();
         const window = this.active_meta();
-        return window ? window.located_on_workspace(active) : this.workspace === active.index();
+        return window?.located_on_workspace(active) ?? false;
     }
 
     /**
