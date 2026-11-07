@@ -140,9 +140,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Store for stable sequences of each registered window */
     ids: Ecs.Storage<number> = this.register_storage();
 
-    /** Store for keeping track of which monitor + workspace a window is on */
-    monitors: Ecs.Storage<MonitorWorkspaceID> = this.register_storage();
-
     /** Stores movements that have been queued */
     movements: Ecs.Storage<Mtk.Rectangle> = this.register_storage();
 
@@ -223,8 +220,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                 }
 
                 window.meta.move_resize_frame(false, movement.x, movement.y, movement.width, movement.height);
-
-                this.monitors.insert(window.entity, [window.monitor_id(), window.workspace_id()]);
 
                 if (window.activate_after_move) {
                     window.activate_after_move = false;
@@ -777,9 +772,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             const actor = win.meta.get_compositor_private<Meta.WindowActor | null>();
             if (actor) global.window_group.set_child_above_sibling(actor, null);
 
-            this.on_monitor_changed(win, (_cfrom, cto, workspace) => {
+            this.on_monitor_changed(win, () => {
                 win.ignore_detach = true;
-                this.monitors.insert(win.entity, [cto, workspace]);
                 this.gnome_forest?.detach_window(win.entity);
             });
         } else {
@@ -866,15 +860,10 @@ export class Ext extends Ecs.System<ExtEvent> {
     ) {
         const actual_monitor = win.monitor_id();
         const actual_workspace = win.workspace_id();
-        const monitor = this.monitors.get(win.entity);
+        const [expected_monitor, expected_workspace] = this.placement(win);
 
-        if (monitor) {
-            const [expected_monitor, expected_workspace] = monitor;
-            if (expected_monitor != actual_monitor || actual_workspace != expected_workspace) {
-                func(expected_monitor, actual_monitor, actual_workspace);
-            }
-        } else {
-            func(null, actual_monitor, actual_workspace);
+        if (expected_monitor != actual_monitor || actual_workspace != expected_workspace) {
+            func(expected_monitor, actual_monitor, actual_workspace);
         }
     }
 
@@ -929,10 +918,10 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_workspace_changed(win: Window.MutterWindowHandle) {
         if (this.gnome_forest && !this.contains_tag(win.entity, Tags.Floating)) {
             const id = this.workspace_id(win);
-            const prev_id = this.monitors.get(win.entity);
-            if (!prev_id || id[0] != prev_id[0] || id[1] != prev_id[1]) {
+            const [monitor, workspace] = this.placement(win);
+            const tiled = this.gnome_forest.attached.contains(win.entity);
+            if (!tiled || id[0] != monitor || id[1] != workspace) {
                 win.ignore_detach = true;
-                this.monitors.insert(win.entity, id);
                 if (win.is_tilable()) {
                     this.gnome_forest.detach_window(win.entity);
                     this.gnome_forest.attach_to_workspace(win, id);
@@ -1400,17 +1389,16 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const [old_primary, old_displays] = this.displays;
 
-        // Each window's monitor before and after the change
+        // Each tiled window's monitor before, which is its tree's, and now
         const placements = function* (ext: Ext): Generator<[MonitorID, MonitorID]> {
             for (const [entity, w] of ext.windows.iter()) {
-                if (!w.actor_exists()) continue;
+                if (!w.actor_exists() || !ext.gnome_forest?.attached.contains(entity)) continue;
 
-                const placement = ext.monitors.get(entity);
-                if (placement) yield [placement[0], w.monitor_id()];
+                yield [ext.placement(w)[0], w.monitor_id()];
             }
         };
 
-        // Where each monitor's windows ended up
+        // Records which monitor's trees had their windows moved to what new monitor
         const changes = monitor_changes(placements(this), old_primary, primary_display);
 
         // Fetch a new list of monitors
@@ -1503,7 +1491,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const win = new Window.MutterWindowHandle(entity, meta, window_app, this);
         this.windows.insert(entity, win);
-        this.monitors.insert(entity, [win.monitor_id(), win.workspace_id()]);
 
         const grab_focus = () => {
             this.when_movements_empty(() => {
@@ -1528,12 +1515,10 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Returns the tilable window(s) that the mouse pointer is currently hovering above. */
     *windows_at_pointer(cursor: Mtk.Rectangle, monitor: MonitorID, workspace: WorkspaceID) {
-        for (const entity of this.monitors.find(m => m[0] == monitor && m[1] == workspace)) {
-            const window = this.windows.with(entity, window => {
-                return window.is_tilable() && window.frame().contains_rect(cursor) ? window : null;
-            });
-
-            if (window) yield window;
+        for (const window of this.windows.values()) {
+            if (!window.actor_exists() || window.monitor_id() != monitor || window.workspace_id() != workspace)
+                continue;
+            if (window.is_tilable() && window.frame().contains_rect(cursor)) yield window;
         }
     }
 
@@ -1546,6 +1531,15 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Fetch a workspace by its index */
     workspace_by_id(id: WorkspaceID): Meta.Workspace | null {
         return wom.get_workspace_by_index(id);
+    }
+
+    /**
+     * Where the window belongs: its tree's monitor and workspace if it's tiled, and otherwise where
+     * mutter has it now
+     */
+    placement(win: Window.MutterWindowHandle): MonitorWorkspaceID {
+        const fork = this.gnome_forest?.forest.leaf_of(win.entity)?.parent;
+        return fork ? [fork.monitor, fork.workspace] : this.workspace_id(win);
     }
 
     workspace_id(window: Window.MutterWindowHandle | null = null): MonitorWorkspaceID {

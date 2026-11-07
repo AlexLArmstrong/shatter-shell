@@ -164,25 +164,20 @@ export class GnomeForest {
 
         if (attached) {
             const [, fork] = attached;
-            const monitor = this.ext.monitors.get(attachee.entity);
-            if (monitor) {
-                if (fork.is_root && fork.smart_gapped && fork.right) {
-                    fork.smart_gapped = false;
-                    const rect = this.ext.monitor_work_area(fork.monitor);
+            if (fork.is_root && fork.smart_gapped && fork.right) {
+                fork.smart_gapped = false;
+                const rect = this.ext.monitor_work_area(fork.monitor);
 
-                    rect.x += this.ext.sizes.gap_outer;
-                    rect.y += this.ext.sizes.gap_outer;
-                    rect.width -= this.ext.sizes.gap_outer * 2;
-                    rect.height -= this.ext.sizes.gap_outer * 2;
+                rect.x += this.ext.sizes.gap_outer;
+                rect.y += this.ext.sizes.gap_outer;
+                rect.width -= this.ext.sizes.gap_outer * 2;
+                rect.height -= this.ext.sizes.gap_outer * 2;
 
-                    fork.set_area(rect);
-                }
-
-                this.tile(fork, fork.area.copy());
-                return true;
-            } else {
-                Log.error(`missing monitor association for Window(${attachee.entity})`);
+                fork.set_area(rect);
             }
+
+            this.tile(fork, fork.area.copy());
+            return true;
         }
 
         return false;
