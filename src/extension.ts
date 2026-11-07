@@ -1495,8 +1495,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         fork.workspace = value;
                         for (const child of this.auto_tiler.forest.iter(entity)) {
                             if (child.inner.kind === node.NodeKind.FORK) {
-                                fork = this.auto_tiler.forest.forks.get(child.inner.entity);
-                                if (fork) fork.workspace = value;
+                                child.inner.fork.workspace = value;
                             } else if (child.is_leaf()) {
                                 for (const entity of child.inner.entities) {
                                     window_move(this, entity, value);

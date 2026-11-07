@@ -182,9 +182,9 @@ export class Tiler {
         const new_fork = forest.create_fork(left, right, fork.area, fork.workspace, fork.monitor);
 
         if (is_left) {
-            fork.left = Node.Node.fork(new_fork[0]);
+            fork.left = Node.Node.fork(new_fork[1]);
         } else {
-            fork.right = Node.Node.fork(new_fork[0]);
+            fork.right = Node.Node.fork(new_fork[1]);
         }
 
         return new_fork[1];

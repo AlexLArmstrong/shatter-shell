@@ -24,6 +24,11 @@ export class Fork {
     right: Node | null;
     area: Mtk.Rectangle;
     entity: Entity;
+    /**
+     * Whether the fork has left the tree, and its entity been deleted. A node of the tree that still
+     * links to it is out of date, so walks of the tree skip it, as they did when they looked it up.
+     */
+    detached: boolean = false;
     on_primary_display: boolean;
     workspace: WorkspaceID;
     length_left: number;
@@ -218,8 +223,8 @@ export class Fork {
             for (const child of forest.iter(this.entity)) {
                 switch (child.inner.kind) {
                     case NodeKind.FORK:
-                        const cfork = forest.forks.get(child.inner.entity);
-                        if (!cfork) continue;
+                        const cfork = child.inner.fork;
+                        if (cfork.detached) continue;
                         cfork.workspace = workspace;
                         cfork.monitor = monitor;
                         cfork.on_primary_display = primary;
