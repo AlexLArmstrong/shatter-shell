@@ -8,6 +8,7 @@ import type { Node, NodeLeaf, TabBars } from './node.js';
 import type { Tree } from './tree.js';
 
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
+import { workspaceID } from './lib.js';
 import * as node from './node.js';
 import { TAB_HEIGHT_UNSCALED } from './stack.js';
 const { NodeKind } = node;
@@ -71,11 +72,12 @@ export class Fork {
     }
 
     get workspace(): WorkspaceID {
-        return this.tree.workspace;
+        return workspaceID(this.tree.index());
     }
 
     set workspace(workspace: WorkspaceID) {
-        this.tree.workspace = workspace;
+        const found = global.workspace_manager.get_workspace_by_index(workspace);
+        if (found) this.tree.move_to(found);
     }
 
     get monitor(): MonitorID {

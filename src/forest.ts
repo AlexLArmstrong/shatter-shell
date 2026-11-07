@@ -306,7 +306,13 @@ export class Forest extends Ecs.World {
     }
 
     add_tree(window: MutterWindowHandle, area: Mtk.Rectangle, id: MonitorWorkspaceID): Tree {
-        const tree = new Tree(id[0], id[1], tree => this.create_fork(Node.Node.window(window), null, area, tree)[1]);
+        const manager = global.workspace_manager;
+        const workspace = manager.get_workspace_by_index(id[1]) ?? manager.get_active_workspace();
+        const tree = new Tree(
+            id[0],
+            workspace,
+            tree => this.create_fork(Node.Node.window(window), null, area, tree)[1],
+        );
         this._trees.add(tree);
 
         return tree;
@@ -396,10 +402,7 @@ export class Forest extends Ecs.World {
     /** Finds the tree on a monitor and workspace */
     find_tree([src_mon, src_work]: MonitorWorkspaceID): Tree | null {
         for (const tree of this.trees) {
-            const { monitor, workspace } = tree;
-            if (monitor == src_mon && workspace == src_work) {
-                return tree;
-            }
+            if (tree.monitor == src_mon && tree.is_on(src_work)) return tree;
         }
 
         return null;
