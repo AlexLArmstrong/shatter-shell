@@ -581,8 +581,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const tiled_windows = new Array<Window.ShellWindow>();
         for (const [entity] of this.auto_tiler.attached.iter()) {
-            if (!this.auto_tiler.attached.contains(entity)) continue;
-
             const win = this.windows.get(entity);
 
             if (win && !win.reassignment && win.monitor_id() === monitor) tiled_windows.push(win);
@@ -892,18 +890,13 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    on_tile_attach(entity: Entity, window: Entity) {
-        if (this.auto_tiler) {
-            if (!this.auto_tiler.attached.contains(window)) {
-                this.windows.with(window, w => {
-                    if (w.prev_rect === null) {
-                        w.prev_rect = w.meta.get_frame_rect();
-                    }
-                });
+    /** Remembers where a window was before it was first tiled, to put it back there when it's untiled */
+    on_tile_attach(window: Entity) {
+        this.windows.with(window, w => {
+            if (w.prev_rect === null) {
+                w.prev_rect = w.meta.get_frame_rect();
             }
-
-            this.auto_tiler.attached.insert(window, entity);
-        }
+        });
     }
 
     on_tile_detach(win: Entity) {
@@ -1386,7 +1379,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                                     win.stack = attachment;
                                     node.entities.push(win.entity);
                                     tiler.update_stack(this, node);
-                                    tiler.forest.on_attach(fork.entity, win.entity);
+                                    tiler.forest.on_attach(win.entity);
                                     stack.activate(win.entity);
                                     tiler.tile(this, fork, fork.area);
                                     return;
@@ -1871,7 +1864,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                 new Forest.Forest()
                     .connect_on_attach(this.on_tile_attach.bind(this))
                     .connect_on_detach(this.on_tile_detach.bind(this)),
-                this.register_storage<Entity>(),
             );
         }
 
@@ -2010,7 +2002,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.settings.set_edge_tiling(true);
 
         if (this.auto_tiler) {
-            this.unregister_storage(this.auto_tiler.attached);
             this.auto_tiler.destroy(this);
             this.auto_tiler = null;
             this.settings.set_tile_by_default(false);
@@ -2036,7 +2027,6 @@ export class Ext extends Ecs.System<ExtEvent> {
             new Forest.Forest()
                 .connect_on_attach(this.on_tile_attach.bind(this))
                 .connect_on_detach(this.on_tile_detach.bind(this)),
-            this.register_storage(),
         );
 
         this.auto_tiler = tiler;

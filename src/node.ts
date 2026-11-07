@@ -187,6 +187,11 @@ export class Node<T extends NodeADT = NodeADT> {
         return fmt;
     }
 
+    /** Whether this is a leaf that holds the window, either on its own or in a stack */
+    has(entity: Entity): boolean {
+        return this.is_window(entity) || this.is_in_stack(entity);
+    }
+
     /** Check if the entity exists as a child of this stack */
     is_in_stack(entity: Entity): this is Node<T> & { inner: NodeStack } {
         if (this.inner.kind === NodeKind.STACK) {

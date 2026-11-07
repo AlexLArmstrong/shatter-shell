@@ -38,7 +38,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] VIM shortcuts work as direction keys
 - [ ] `Super` `O` changes window orientation
 - [ ] `Super` `G` floats and then re-tiles a window
-- [ ] With "Reset untiled window's position" enabled, a window that was moved into a stack, onto another window or to another workspace still returns to where it was before it was first tiled when it's floated.
+- [ ] With "Reset untiled window's position" enabled, a window that was moved into or out of a stack, onto another window or to another workspace still returns to where it was before it was first tiled when it's floated.
 - [ ] Float a window with `Super` `G`. It should be movable and resizeable in window management mode with keyboard keys
 - [ ] `Super` `Q` Closes a window
 - [ ] Turn off auto-tiling. New windows launch floating.

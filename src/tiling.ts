@@ -187,15 +187,6 @@ export class Tiler {
             fork.right = Node.Node.fork(new_fork[0]);
         }
 
-        // Associate the new fork with its parent
-        ext.auto_tiler.forest.parents.insert(new_fork[0], fork.entity);
-
-        // Update parent assignments
-        forest.on_attach(new_fork[0], focused.entity);
-        for (const e of stack.entities) {
-            forest.on_attach(new_fork[0], e);
-        }
-
         return new_fork[1];
     }
 
@@ -320,7 +311,6 @@ export class Tiler {
 
         const modifier = new_fork ?? fork;
         modifier.set_orientation(orientation);
-        ext.auto_tiler.forest.on_attach(modifier.entity, focused.entity);
         ext.auto_tiler.tile(ext, fork, fork.area);
         this.overlay_watch(ext, focused);
     }
@@ -383,7 +373,6 @@ export class Tiler {
 
             const modifier = new_fork ?? fork;
             modifier.set_orientation(orientation);
-            forest.on_attach(modifier.entity, fentity);
             ext.auto_tiler.tile(ext, fork, fork.area);
             this.overlay_watch(ext, focused);
         };
@@ -556,7 +545,6 @@ export class Tiler {
 
                     at.detach_window(ext, focused.entity, false);
 
-                    at.forest.on_attach(stack_fork.entity, focused.entity);
                     at.update_stack(ext, stack);
 
                     at.tile(ext, stack_fork, stack_fork.area);

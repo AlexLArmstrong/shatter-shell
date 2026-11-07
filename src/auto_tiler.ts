@@ -19,13 +19,36 @@ const { NodeKind } = node;
 import { Log } from './log.js';
 import { Tags } from './tags.js';
 
+/**
+ * Which fork holds each tiled window. It's read from the tree rather than stored, so that it can never
+ * disagree with it, and nothing needs to keep it up to date.
+ */
+export class Attachments {
+    constructor(private readonly forest: Forest) {}
+
+    /** The fork that holds the window's leaf, if it's tiled */
+    get(window: Entity): Entity | null {
+        return this.forest.fork_of(window);
+    }
+
+    /** Whether the window is tiled */
+    contains(window: Entity): boolean {
+        return this.get(window) !== null;
+    }
+
+    /** Every tiled window, with the fork that holds its leaf */
+    iter(): Generator<[Entity, Entity], void> {
+        return this.forest.tiled();
+    }
+}
+
 export class AutoTiler {
     forest: Forest;
-    attached: ecs.Storage<Entity>;
+    readonly attached: Attachments;
 
-    constructor(forest: Forest, attached: ecs.Storage<Entity>) {
+    constructor(forest: Forest) {
         this.forest = forest;
-        this.attached = attached;
+        this.attached = new Attachments(forest);
     }
 
     /** Swap window associations in the auto-tiler
@@ -75,10 +98,7 @@ export class AutoTiler {
         }
 
         const a_fn = a_fork.replace_window(ext, a_win, b_win);
-        this.forest.on_attach(a_ent, b);
-
         const b_fn = b_fork.replace_window(ext, b_win, a_win);
-        this.forest.on_attach(b_ent, a);
 
         if (a_fn) a_fn();
         if (b_fn) b_fn();
@@ -128,8 +148,8 @@ export class AutoTiler {
             rect.height -= ext.gap_outer * 2;
         }
 
-        const [entity, fork] = this.forest.create_toplevel(win.entity, rect.copy(), workspace_id);
-        this.forest.on_attach(entity, win.entity);
+        const [, fork] = this.forest.create_toplevel(win.entity, rect.copy(), workspace_id);
+        this.forest.on_attach(win.entity);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
 
@@ -241,7 +261,8 @@ export class AutoTiler {
      * returns to once it's untiled.
      */
     detach_window(ext: Ext, win: Entity, untiling: boolean = true) {
-        this.attached.take_with(win, prev_fork => {
+        const prev_fork = this.attached.get(win);
+        if (prev_fork) {
             const reflow_fork = this.forest.detach(ext, prev_fork, win, untiling);
 
             if (reflow_fork) {
@@ -254,7 +275,7 @@ export class AutoTiler {
 
                 this.tile(ext, fork, fork.area);
             }
-        });
+        }
     }
 
     /** Swaps the location of two windows if the dropped window was dropped onto its sibling */
