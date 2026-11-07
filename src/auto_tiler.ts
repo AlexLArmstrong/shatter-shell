@@ -115,8 +115,9 @@ export class AutoTiler {
             rect.height -= ext.gap_outer * 2;
         }
 
-        if (fork.left.inner.kind === NodeKind.WINDOW) {
-            const win = ext.windows.get(fork.left.inner.entity);
+        const lone = fork.left.lone_window();
+        if (lone) {
+            const win = ext.windows.get(lone);
             if (win) {
                 win.smart_gapped = fork.smart_gapped;
             }
@@ -225,9 +226,7 @@ export class AutoTiler {
     destroy(ext: Ext) {
         for (const [, [fent]] of this.forest.toplevel) {
             for (const node of this.forest.iter(fent)) {
-                if (node.inner.kind === NodeKind.WINDOW) {
-                    this.forest.on_detach(node.inner.entity);
-                } else if (node.inner.kind === NodeKind.STACK) {
+                if (node.is_leaf()) {
                     for (const window of node.inner.entities) {
                         this.forest.on_detach(window);
                     }
@@ -276,29 +275,19 @@ export class AutoTiler {
             const fork = this.forest.forks.get(fork_entity);
 
             if (fork) {
-                if (
-                    fork.left.inner.kind === NodeKind.WINDOW
-                    && fork.right
-                    && fork.right.inner.kind === NodeKind.WINDOW
-                ) {
-                    if (fork.left.is_window(win)) {
-                        const sibling = ext.windows.get(fork.right.inner.entity);
-                        if (sibling && sibling.rect().contains_rect(cursor)) {
-                            if (swap) {
-                                fork.left.inner.entity = fork.right.inner.entity;
-                                fork.right.inner.entity = win;
+                const left = fork.left.lone_window();
+                const right = fork.right?.lone_window() ?? null;
 
-                                this.tile(ext, fork, fork.area);
-                            }
-
-                            return true;
-                        }
-                    } else if (fork.right.is_window(win)) {
-                        const sibling = ext.windows.get(fork.left.inner.entity);
-                        if (sibling && sibling.rect().contains_rect(cursor)) {
+                if (left && right && fork.right) {
+                    const sibling = ext.windows.get(ecs.entity_eq(left, win) ? right : left);
+                    if (sibling && (ecs.entity_eq(left, win) || ecs.entity_eq(right, win))) {
+                        if (sibling.rect().contains_rect(cursor)) {
                             if (swap) {
-                                fork.right.inner.entity = fork.left.inner.entity;
-                                fork.left.inner.entity = win;
+                                // Both are leaves of one window without tabs, so swapping the leaves
+                                // swaps the windows
+                                const temp = fork.left;
+                                fork.left = fork.right;
+                                fork.right = temp;
 
                                 this.tile(ext, fork, fork.area);
                             }
@@ -394,8 +383,10 @@ export class AutoTiler {
 
         // If it appears to not be attaching to anything, assume we are attaching to its sibling
         if (attach_to === null) {
-            if (fork.left.inner.kind === NodeKind.WINDOW && fork.right?.inner.kind === NodeKind.WINDOW) {
-                const attaching = fork.left.is_window(win.entity) ? fork.right.inner.entity : fork.left.inner.entity;
+            const left = fork.left.lone_window();
+            const right = fork.right?.lone_window() ?? null;
+            if (left && right) {
+                const attaching = ecs.entity_eq(left, win.entity) ? right : left;
                 attach_to = ext.windows.get(attaching);
             } else if (!windowless) {
                 this.tile(ext, fork, fork.area);
@@ -555,61 +546,46 @@ export class AutoTiler {
     }
 
     unstack(ext: Ext, fork: Fork, win: ShellWindow, toggled: boolean = false) {
-        const stack_toggle = (fork: Fork, branch: node.Node<node.NodeStack>) => {
-            // If the stack contains 1 item, unstack it
-            const stack = branch.inner;
-            if (stack.entities.length === 1) {
-                this.forest.stacks.remove(stack.idx)?.destroy();
-                fork.measure(this.forest, ext, fork.area, this.forest.on_record());
-                return node.Node.window(win.entity);
-            }
-
-            return null;
-        };
-
         if (toggled && fork.left.is_window(win.entity)) {
-            // Assign left window as stack.
-            fork.left = this.new_stack(ext, fork, win.entity);
+            this.add_tabs(ext, fork, fork.left);
             fork.measure(this.forest, ext, fork.area, this.forest.on_record());
         } else if (fork.left.is_in_stack(win.entity)) {
-            const node = stack_toggle(fork, fork.left);
-            if (node) {
-                fork.left = node;
-
-                if (!fork.right) {
-                    this.forest.reassign_to_parent(fork, node);
-                }
+            // Only a stack of one window loses its tabs
+            if (fork.left.inner.entities.length === 1) {
+                this.remove_tabs(fork.left);
+                fork.measure(this.forest, ext, fork.area, this.forest.on_record());
+                if (!fork.right) this.forest.reassign_to_parent(fork, fork.left);
             }
         } else if (toggled && fork.right && fork.right.is_window(win.entity)) {
-            // Assign right window as stack
-            fork.right = this.new_stack(ext, fork, win.entity);
+            this.add_tabs(ext, fork, fork.right);
             fork.measure(this.forest, ext, fork.area, this.forest.on_record());
         } else if (fork.right && fork.right.is_in_stack(win.entity)) {
-            const node = stack_toggle(fork, fork.right);
-            if (node) fork.right = node;
+            if (fork.right.inner.entities.length === 1) {
+                this.remove_tabs(fork.right);
+                fork.measure(this.forest, ext, fork.area, this.forest.on_record());
+            }
         }
 
         this.tile(ext, fork, fork.area);
     }
 
-    stack_left(ext: Ext, fork: Fork, window: ShellWindow) {
-        fork.left = this.new_stack(ext, fork, window.entity);
-        fork.measure(this.forest, ext, fork.area, this.forest.on_record());
-    }
+    /** Gives a leaf tabs, along with the Stack that draws them, so that it can hold more windows */
+    private add_tabs(ext: Ext, fork: Fork, leaf: node.Node<node.NodeStack>) {
+        if (leaf.inner.tabbed) return;
 
-    stack_right(ext: Ext, fork: Fork, window: ShellWindow) {
-        fork.right = this.new_stack(ext, fork, window.entity);
-        fork.measure(this.forest, ext, fork.area, this.forest.on_record());
-    }
-
-    /** Creates a stack of one window in the tree, along with the Stack that draws it */
-    private new_stack(ext: Ext, fork: Fork, window: Entity): node.Node<node.NodeStack> {
-        const leaf = node.Node.stacked(window, 0);
+        leaf.inner.tabbed = true;
         leaf.inner.idx = this.forest.stacks.insert(new Stack(ext, leaf.inner, fork.workspace));
-        return leaf;
     }
 
-    /** Convers a window into a stack if it was not already stacked */
+    /** Takes the tabs from a leaf of one window, which releases the window */
+    private remove_tabs(leaf: node.Node<node.NodeStack>) {
+        if (leaf.inner.idx !== null) this.forest.stacks.remove(leaf.inner.idx)?.destroy();
+
+        leaf.inner.tabbed = false;
+        leaf.inner.idx = null;
+    }
+
+    /** Gives the leaf of a window tabs, if it has none yet */
     create_stack(ext: Ext, window: ShellWindow) {
         const entity = this.attached.get(window.entity);
         if (!entity) return;
@@ -617,16 +593,20 @@ export class AutoTiler {
         const fork = this.forest.forks.get(entity);
         if (!fork) return;
 
-        if (fork.left.is_window(window.entity)) {
-            this.stack_left(ext, fork, window);
-        } else if (fork.right && fork.right.is_window(window.entity)) {
-            this.stack_right(ext, fork, window);
-        }
+        const leaf = fork.left.is_window(window.entity)
+            ? fork.left
+            : fork.right?.is_window(window.entity)
+              ? fork.right
+              : null;
+        if (!leaf) return;
+
+        this.add_tabs(ext, fork, leaf);
+        fork.measure(this.forest, ext, fork.area, this.forest.on_record());
     }
 
     /** Draws a stack again from the tree, and places its tab bar if it has been measured */
     update_stack(_ext: Ext, stack: node.NodeStack) {
-        const container = this.forest.stacks.get(stack.idx);
+        const container = this.forest.view_of(stack);
         if (!container) return;
 
         // Only what differs from the last time is changed, so a retile leaves the windows as they are

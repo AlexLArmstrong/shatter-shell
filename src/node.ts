@@ -7,10 +7,12 @@ import type { Forest } from './forest.js';
 import * as Ecs from './ecs.js';
 import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
-/** A node is either a fork, a window, or a stack. */
+/**
+ * A node is either a fork, or a stack of windows, which is every leaf of the tree. A window on its own
+ * is a stack of one that has no tab bar.
+ */
 export enum NodeKind {
     FORK = 1,
-    WINDOW = 2,
     STACK = 3,
 }
 
@@ -19,8 +21,6 @@ function node_kind_as_string(kind: NodeKind): string {
     switch (kind) {
         case NodeKind.FORK:
             return 'NodeKind.FORK';
-        case NodeKind.WINDOW:
-            return 'NodeKind.WINDOW';
         case NodeKind.STACK:
             return 'NodeKind.STACK';
     }
@@ -32,20 +32,18 @@ export interface NodeFork {
     entity: Entity;
 }
 
-/** Identifies this node as a window */
-export interface NodeWindow {
-    kind: NodeKind.WINDOW;
-    entity: Entity;
-}
-
 /**
- * A leaf of the tree that holds windows, and shows one of them at a time. This is everything there is
- * to know about a stack: its Stack in Forest.stacks only draws it, with a tab bar.
+ * A leaf of the tree, which holds windows and shows one of them at a time. This is everything there
+ * is to know about it: a tabbed leaf also has a Stack in Forest.stacks, which only draws it.
+ *
+ * A leaf without tabs holds exactly one window, and is what used to be a window node.
  */
 export interface NodeStack {
     kind: NodeKind.STACK;
-    /** The index of the Stack in Forest.stacks that draws this leaf */
-    idx: number;
+    /** Whether the leaf has a tab bar, and so can hold more than one window */
+    tabbed: boolean;
+    /** The index of the Stack in Forest.stacks that draws this leaf, which only a tabbed one has */
+    idx: number | null;
     /** The windows, in the order of their tabs */
     entities: Array<Entity>;
     /** The window that is shown. It's always one of the entities while there are any. */
@@ -170,7 +168,7 @@ export function stack_move_right(ext: Ext, node: NodeStack, entity: Entity): boo
     return true;
 }
 
-export type NodeADT = NodeFork | NodeWindow | NodeStack;
+export type NodeADT = NodeFork | NodeStack;
 
 /** A tiling node may either refer to a window entity, or another fork entity */
 export class Node<T extends NodeADT = NodeADT> {
@@ -186,18 +184,15 @@ export class Node<T extends NodeADT = NodeADT> {
         return new Node({ kind: NodeKind.FORK, entity });
     }
 
-    /** Create the window variant of a `Node` */
-    static window(entity: Entity): Node<NodeWindow> {
-        return new Node({ kind: NodeKind.WINDOW, entity });
-    }
-
-    static stacked(window: Entity, idx: number): Node<NodeStack> {
+    /** Creates a leaf of one window, without tabs */
+    static window(entity: Entity): Node<NodeStack> {
         return new Node({
             kind: NodeKind.STACK,
-            entities: [window],
-            active: window,
+            tabbed: false,
+            idx: null,
+            entities: [entity],
+            active: entity,
             prev_active: null,
-            idx,
             rect: null,
         });
     }
@@ -207,30 +202,28 @@ export class Node<T extends NodeADT = NodeADT> {
         let fmt = `Node{\n    kind: ${node_kind_as_string(this.inner.kind)},\n`;
         switch (this.inner.kind) {
             case NodeKind.FORK:
-            case NodeKind.WINDOW:
                 fmt += `    entity: (${this.inner.entity})\n  }`;
                 break;
             case NodeKind.STACK:
-                fmt += `    entities: ${this.inner.entities}\n  }`;
+                fmt += `    tabbed: ${this.inner.tabbed}, entities: ${this.inner.entities}\n  }`;
                 break;
         }
         return fmt;
     }
 
-    /** Whether this is a leaf that holds the window, either on its own or in a stack */
-    has(entity: Entity): boolean {
-        return this.is_window(entity) || this.is_in_stack(entity);
+    /** Whether this is a leaf, which every node but a fork is */
+    is_leaf(): this is Node<NodeStack> {
+        return this.inner.kind === NodeKind.STACK;
     }
 
-    /** Check if the entity exists as a child of this stack */
-    is_in_stack(entity: Entity): this is Node<T> & { inner: NodeStack } {
-        if (this.inner.kind === NodeKind.STACK) {
-            for (const compare of this.inner.entities) {
-                if (Ecs.entity_eq(entity, compare)) return true;
-            }
-        }
+    /** Whether this is a leaf that holds the window, with tabs or without */
+    has(entity: Entity): this is Node<NodeStack> {
+        return this.is_leaf() && this.inner.entities.some(other => Ecs.entity_eq(entity, other));
+    }
 
-        return false;
+    /** Whether this is a leaf with tabs that holds the window */
+    is_in_stack(entity: Entity): this is Node<NodeStack> {
+        return this.has(entity) && this.inner.tabbed;
     }
 
     /** Asks if this fork is the fork we are looking for */
@@ -238,9 +231,14 @@ export class Node<T extends NodeADT = NodeADT> {
         return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.entity, entity);
     }
 
-    /** Asks if this window is the window we are looking for */
-    is_window(entity: Entity): boolean {
-        return this.inner.kind === NodeKind.WINDOW && Ecs.entity_eq(this.inner.entity, entity);
+    /** Whether this is a leaf without tabs, which holds only this window */
+    is_window(entity: Entity): this is Node<NodeStack> {
+        return this.has(entity) && !this.inner.tabbed;
+    }
+
+    /** The window of a leaf without tabs, or null for any other node */
+    lone_window(): Entity | null {
+        return this.is_leaf() && !this.inner.tabbed ? (this.inner.entities[0] ?? null) : null;
     }
 
     /** Calculates the future arrangement of windows in this node */
@@ -259,21 +257,20 @@ export class Node<T extends NodeADT = NodeADT> {
                 }
 
                 break;
-            case NodeKind.WINDOW:
-                record(this.inner.entity, parent, area.copy());
-                break;
             case NodeKind.STACK:
-                const tab_height = ext.dpi * TAB_HEIGHT_UNSCALED;
-
+                // Only a tabbed leaf leaves room for its tab bar
                 this.inner.rect = area.copy();
-                this.inner.rect.y += tab_height;
-                this.inner.rect.height -= tab_height;
-
-                for (const entity of this.inner.entities) {
-                    record(entity, parent, this.inner.rect);
+                if (this.inner.tabbed) {
+                    const tab_height = ext.dpi * TAB_HEIGHT_UNSCALED;
+                    this.inner.rect.y += tab_height;
+                    this.inner.rect.height -= tab_height;
                 }
 
-                if (ext.auto_tiler) {
+                for (const entity of this.inner.entities) {
+                    record(entity, parent, this.inner.tabbed ? this.inner.rect : this.inner.rect.copy());
+                }
+
+                if (this.inner.tabbed && ext.auto_tiler) {
                     ext.auto_tiler.forest.stack_updates.push([this.inner, parent]);
                 }
         }

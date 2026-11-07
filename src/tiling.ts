@@ -558,7 +558,7 @@ export class Tiler {
                                 return;
                             }
 
-                            if (fork.left.inner.kind === Node.NodeKind.STACK) {
+                            if (fork.left.is_leaf() && fork.left.inner.tabbed) {
                                 Node.stack_remove(ext, fork.left.inner, focused.entity);
                             } else {
                                 const temp = fork.right;

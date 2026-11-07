@@ -161,7 +161,7 @@ export class ShellWindow {
     hidden_by_stack(): boolean {
         const tiler = this.ext.auto_tiler;
         const leaf = tiler?.find_stack(this.entity)?.[1].inner;
-        if (!tiler || !leaf || !tiler.forest.stacks.get(leaf.idx)) return false;
+        if (!tiler || !leaf || !tiler.forest.view_of(leaf)) return false;
         return !Ecs.entity_eq(leaf.active, this.entity);
     }
 

@@ -69,6 +69,7 @@ export class Forest extends Ecs.World {
     /** Needed when we're storing the entities in a map, because JS limitations. */
     string_reps: Ecs.Storage<string> = this.register_storage();
 
+    /** The tab bars of the leaves that have tabs, by NodeStack.idx */
     stacks: arena.Arena<Stack> = new Arena();
 
     /**
@@ -99,15 +100,16 @@ export class Forest extends Ecs.World {
     *tiled(): Generator<[Entity, Entity], void> {
         for (const [entity, fork] of this.forks.iter()) {
             for (const branch of [fork.left, fork.right]) {
-                if (!branch) continue;
-                const inner = branch.inner;
-                if (inner.kind === Node.NodeKind.WINDOW) {
-                    yield [inner.entity, entity];
-                } else if (inner.kind === Node.NodeKind.STACK) {
-                    for (const window of inner.entities) yield [window, entity];
+                if (branch?.is_leaf()) {
+                    for (const window of branch.inner.entities) yield [window, entity];
                 }
             }
         }
+    }
+
+    /** The Stack that draws a leaf, which only one with tabs has */
+    view_of(leaf: Node.NodeStack): Stack | null {
+        return leaf.idx === null ? null : this.stacks.get(leaf.idx);
     }
 
     /**
@@ -202,7 +204,7 @@ export class Forest extends Ecs.World {
         new_entity: Entity,
         stack_from_left: boolean,
     ): [Entity, Fork.Fork] | null {
-        const container = this.stacks.get(stack.idx);
+        const container = this.view_of(stack);
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
@@ -410,69 +412,52 @@ export class Forest extends Ecs.World {
             stack_detach = false;
 
         const parent = this.parent_of(fork_entity);
-        if (fork.left.is_window(window)) {
-            if (parent && fork.right) {
-                const pfork = this.reassign_child_to_parent(fork_entity, parent, fork.right);
-                if (!pfork) return null;
-                reflow_fork = [parent, pfork];
-            } else if (fork.right) {
-                reflow_fork = [fork_entity, fork];
-                switch (fork.right.inner.kind) {
-                    case Node.NodeKind.FORK:
-                        this.reassign_children_to_parent(fork_entity, fork.right.inner.entity, fork);
-                        break;
-                    default:
-                        const detached = fork.right;
-                        fork.left = detached;
-                        fork.right = null;
-                }
-            } else {
-                this.delete_entity(fork_entity);
-            }
-        } else if (fork.left.is_in_stack(window)) {
+        const on_left = fork.left.has(window);
+        const branch = on_left ? fork.left : fork.right?.has(window) ? fork.right : null;
+
+        if (branch?.is_leaf() && branch.inner.entities.length > 1) {
+            // The window only leaves its stack, which keeps its place in the tree
             reflow_fork = [fork_entity, fork];
             stack_detach = true;
+            Node.stack_remove(ext, branch.inner, window);
+        } else if (branch?.is_leaf()) {
+            // The leaf leaves the tree along with its last window, whether or not it has tabs
+            if (branch.inner.idx !== null) this.stacks.remove(branch.inner.idx)?.destroy();
 
-            this.remove_from_stack(ext, fork.left.inner, window, () => {
-                if (fork.right) {
-                    fork.left = fork.right;
-                    fork.right = null;
-                    if (parent) {
-                        const pfork = this.reassign_child_to_parent(fork_entity, parent, fork.left);
-                        if (!pfork) return;
-                        reflow_fork = [parent, pfork];
-                    }
-                } else {
-                    this.delete_entity(fork.entity);
-                }
-            });
-        } else if (fork.right) {
-            if (fork.right.is_window(window)) {
-                // Same as the `fork.left` branch.
-                if (parent) {
-                    const pfork = this.reassign_child_to_parent(fork_entity, parent, fork.left);
+            if (on_left) {
+                if (parent && fork.right) {
+                    const pfork = this.reassign_child_to_parent(fork_entity, parent, fork.right);
                     if (!pfork) return null;
                     reflow_fork = [parent, pfork];
-                } else {
+                } else if (fork.right) {
                     reflow_fork = [fork_entity, fork];
-
-                    switch (fork.left.inner.kind) {
+                    switch (fork.right.inner.kind) {
                         case Node.NodeKind.FORK:
-                            this.reassign_children_to_parent(fork_entity, fork.left.inner.entity, fork);
+                            this.reassign_children_to_parent(fork_entity, fork.right.inner.entity, fork);
                             break;
                         default:
+                            const detached = fork.right;
+                            fork.left = detached;
                             fork.right = null;
-                            break;
                     }
+                } else {
+                    this.delete_entity(fork_entity);
                 }
-            } else if (fork.right.is_in_stack(window)) {
+            } else if (parent) {
+                const pfork = this.reassign_child_to_parent(fork_entity, parent, fork.left);
+                if (!pfork) return null;
+                reflow_fork = [parent, pfork];
+            } else {
                 reflow_fork = [fork_entity, fork];
-                stack_detach = true;
 
-                this.remove_from_stack(ext, fork.right.inner, window, () => {
-                    fork.right = null;
-                    this.reassign_to_parent(fork, fork.left);
-                });
+                switch (fork.left.inner.kind) {
+                    case Node.NodeKind.FORK:
+                        this.reassign_children_to_parent(fork_entity, fork.left.inner.entity, fork);
+                        break;
+                    default:
+                        fork.right = null;
+                        break;
+                }
             }
         }
 
@@ -602,13 +587,7 @@ export class Forest extends Ecs.World {
         };
 
         for (const node of this.iter(entity)) {
-            switch (node.inner.kind) {
-                case Node.NodeKind.WINDOW:
-                    window_compare(node.inner.entity);
-                    break;
-                case Node.NodeKind.STACK:
-                    window_compare(node.inner.entities[0]!);
-            }
+            if (node.is_leaf()) window_compare(node.inner.entities[0]!);
         }
 
         return largest_window;
@@ -623,7 +602,7 @@ export class Forest extends Ecs.World {
         movement: movement.Movement,
         crect: Mtk.Rectangle,
     ) {
-        const is_left = fork_c.left.is_window(win_e) || fork_c.left.is_in_stack(win_e);
+        const is_left = fork_c.left.has(win_e);
         if ((movement & Movement.SHRINK) != 0) {
             this.shrink_sibling(ext, fork_e, fork_c, is_left, movement, crect);
         } else {
@@ -708,16 +687,6 @@ export class Forest extends Ecs.World {
      */
     private readjust_fork_ratio_by_right(ext: Ext, right_length: number, fork: Fork.Fork, fork_length: number) {
         this.readjust_fork_ratio_by_left(ext, fork_length - right_length, fork);
-    }
-
-    /** Removes window from stack, destroying the stack if it was the last window. */
-    private remove_from_stack(ext: Ext, stack: Node.NodeStack, window: Entity, on_last: () => void) {
-        if (stack.entities.length === 1) {
-            this.stacks.remove(stack.idx)?.destroy();
-            on_last();
-        } else {
-            Node.stack_remove(ext, stack, window);
-        }
     }
 
     /** Resizes a fork in the direction that a movement requests */
@@ -837,12 +806,15 @@ export class Forest extends Ecs.World {
             case Node.NodeKind.FORK:
                 const fork = this.forks.get(branch.inner.entity);
                 return fork ? this.display_fork(ext, branch.inner.entity, fork, scope + 1) : 'Missing Fork';
-            case Node.NodeKind.WINDOW:
-                const window = ext.windows.get(branch.inner.entity);
-                const area = window ? fmtRect(window.rect()) : 'unknown area';
-                const parent = ext.auto_tiler?.attached.get(branch.inner.entity);
-                return `Window(${branch.inner.entity}) (${area}; parent: ${parent})`;
             case Node.NodeKind.STACK:
+                const lone = branch.lone_window();
+                if (lone) {
+                    const window = ext.windows.get(lone);
+                    const area = window ? fmtRect(window.rect()) : 'unknown area';
+                    const parent = ext.auto_tiler?.attached.get(lone);
+                    return `Window(${lone}) (${area}; parent: ${parent})`;
+                }
+
                 let fmt = 'Stack(';
 
                 for (const entity of branch.inner.entities) {
