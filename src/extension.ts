@@ -946,11 +946,8 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     update_inner_gap() {
         if (this.auto_tiler) {
-            for (const [entity] of this.auto_tiler.forest.toplevel.values()) {
-                const fork = this.auto_tiler.forest.forks.get(entity);
-                if (fork) {
-                    this.auto_tiler.tile(this, fork, fork.area);
-                }
+            for (const [, fork] of this.auto_tiler.forest.toplevels()) {
+                this.auto_tiler.tile(this, fork, fork.area);
             }
         } else {
             this.update_snapped();
@@ -999,17 +996,13 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     update_outer_gap(diff: number) {
         if (this.auto_tiler) {
-            for (const [entity] of this.auto_tiler.forest.toplevel.values()) {
-                const fork = this.auto_tiler.forest.forks.get(entity);
+            for (const [, fork] of this.auto_tiler.forest.toplevels()) {
+                fork.area.x += diff * 4;
+                fork.area.y += diff * 4;
+                fork.area.width -= diff * 8;
+                fork.area.height -= diff * 8;
 
-                if (fork) {
-                    fork.area.x += diff * 4;
-                    fork.area.y += diff * 4;
-                    fork.area.width -= diff * 8;
-                    fork.area.height -= diff * 8;
-
-                    this.auto_tiler.tile(this, fork, fork.area);
-                }
+                this.auto_tiler.tile(this, fork, fork.area);
             }
         } else {
             this.update_snapped();
@@ -1410,10 +1403,9 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_smart_gap() {
         if (this.auto_tiler) {
             const smart_gaps = this.settings.get_smart_gaps();
-            for (const [entity, [mon]] of this.auto_tiler.forest.toplevel.values()) {
-                const node = this.auto_tiler.forest.forks.get(entity);
-                if (node?.right === null) {
-                    this.auto_tiler.update_toplevel(this, node, mon, smart_gaps);
+            for (const [, node] of this.auto_tiler.forest.toplevels()) {
+                if (node.right === null) {
+                    this.auto_tiler.update_toplevel(this, node, node.monitor, smart_gaps);
                 }
             }
         }
@@ -1486,23 +1478,21 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
 
         if (this.auto_tiler) {
-            for (const [entity, monitor] of this.auto_tiler.forest.toplevel.values()) {
-                if (condition(monitor[1])) {
-                    const value = modify(monitor[1]);
-                    monitor[1] = value;
-                    let fork = this.auto_tiler.forest.forks.get(entity);
-                    if (fork) {
-                        fork.workspace = value;
-                        for (const child of this.auto_tiler.forest.iter(entity)) {
-                            if (child.inner.kind === node.NodeKind.FORK) {
-                                child.inner.fork.workspace = value;
-                            } else if (child.is_leaf()) {
-                                for (const entity of child.inner.entities) {
-                                    window_move(this, entity, value);
-                                }
+            // A snapshot, as moving windows may change the forest
+            const toplevels = Array.from(this.auto_tiler.forest.toplevels());
+            for (const [entity, fork] of toplevels) {
+                if (condition(fork.workspace)) {
+                    // This moves the whole tree, as all of its forks share the root
+                    const value = modify(fork.workspace);
+                    fork.workspace = value;
 
-                                this.auto_tiler.forest.view_of(child.inner)?.restack();
+                    for (const child of this.auto_tiler.forest.iter(entity)) {
+                        if (child.is_leaf()) {
+                            for (const entity of child.inner.entities) {
+                                window_move(this, entity, value);
                             }
+
+                            this.auto_tiler.forest.view_of(child.inner)?.restack();
                         }
                     }
                 }

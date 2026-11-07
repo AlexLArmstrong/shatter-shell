@@ -15,9 +15,27 @@ const YPOS = 'y' as const;
 const WIDTH = 'width' as const;
 const HEIGHT = 'height' as const;
 
-/** A tiling fork contains two children nodes.
+/**
+ * What a tree knows about where it is: its monitor and its workspace. Every fork of the tree shares
+ * this one object, so that moving the tree only changes it once, and its forks can't disagree.
+ */
+export class Root {
+    monitor: MonitorID;
+    workspace: WorkspaceID;
+    on_primary_display: boolean;
+
+    constructor(monitor: MonitorID, workspace: WorkspaceID) {
+        this.monitor = monitor;
+        this.workspace = workspace;
+        this.on_primary_display = global.display.get_primary_monitor() === monitor;
+    }
+}
+
+/**
+ * A tiling fork contains two children nodes, which may either be leaves or sub-forks.
  *
- * These nodes may either be windows, or sub-forks.
+ * Only the top fork of a tree may have just one child, its left: a fork below it that is left with
+ * one child is replaced by that child.
  */
 export class Fork {
     left: Node;
@@ -29,12 +47,11 @@ export class Fork {
      * links to it is out of date, so walks of the tree skip it, as they did when they looked it up.
      */
     detached: boolean = false;
-    on_primary_display: boolean;
-    workspace: WorkspaceID;
+    /** The tree's monitor and workspace, which all of its forks share */
+    readonly root: Root;
     length_left: number;
     prev_length_left: number;
     prev_ratio: number = 0.5;
-    monitor: MonitorID;
     minimum_ratio: number = 0.1;
     orientation;
 
@@ -51,20 +68,44 @@ export class Fork {
         left: Node,
         right: Node | null,
         area: Mtk.Rectangle,
-        workspace: WorkspaceID,
-        monitor: MonitorID,
+        root: Root,
         orientation = Clutter.Orientation.HORIZONTAL,
     ) {
-        this.on_primary_display = global.display.get_primary_monitor() === monitor;
         this.area = area;
         this.left = left;
         this.right = right;
-        this.workspace = workspace;
+        this.root = root;
         this.length_left = orientation === Clutter.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
         this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orientation;
-        this.monitor = monitor;
+    }
+
+    /** The tree's workspace */
+    get workspace(): WorkspaceID {
+        return this.root.workspace;
+    }
+
+    set workspace(workspace: WorkspaceID) {
+        this.root.workspace = workspace;
+    }
+
+    /** The tree's monitor */
+    get monitor(): MonitorID {
+        return this.root.monitor;
+    }
+
+    set monitor(monitor: MonitorID) {
+        this.root.monitor = monitor;
+    }
+
+    /** Whether the tree is on the primary monitor */
+    get on_primary_display(): boolean {
+        return this.root.on_primary_display;
+    }
+
+    set on_primary_display(primary: boolean) {
+        this.root.on_primary_display = primary;
     }
 
     /** The calculated left area of this fork */
@@ -140,13 +181,6 @@ export class Fork {
         return this;
     }
 
-    /** Defines this fork as a top level fork, and records it in the forest */
-    set_toplevel(tiler: Forest, entity: Entity, string: string, id: MonitorWorkspaceID): Fork {
-        this.is_toplevel = true;
-        tiler.toplevel.set(string, [entity, id]);
-        return this;
-    }
-
     /** Calculates the future arrangement of windows in this fork */
     measure(
         tiler: Forest,
@@ -218,16 +252,10 @@ export class Fork {
 
             const blocked = [];
 
-            forest.toplevel.set(forest.string_reps.get(this.entity)!, [this.entity, [monitor, workspace]]);
-
             for (const child of forest.iter(this.entity)) {
                 switch (child.inner.kind) {
                     case NodeKind.FORK:
-                        const cfork = child.inner.fork;
-                        if (cfork.detached) continue;
-                        cfork.workspace = workspace;
-                        cfork.monitor = monitor;
-                        cfork.on_primary_display = primary;
+                        // Its monitor and workspace are the root's, which have already changed
                         break;
                     case NodeKind.STACK:
                         for (const entity of child.inner.entities) {

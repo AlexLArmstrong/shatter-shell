@@ -224,7 +224,7 @@ export class AutoTiler {
 
     /** Destroy all widgets owned by this object. Call before dropping. */
     destroy(ext: Ext) {
-        for (const [, [fent]] of this.forest.toplevel) {
+        for (const [fent] of this.forest.toplevels()) {
             for (const node of this.forest.iter(fent)) {
                 if (node.is_leaf()) {
                     for (const window of node.inner.entities) {

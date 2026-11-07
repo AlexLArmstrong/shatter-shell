@@ -179,7 +179,7 @@ export class Tiler {
         if (!ext.auto_tiler) return null;
 
         const forest = ext.auto_tiler.forest;
-        const new_fork = forest.create_fork(left, right, fork.area, fork.workspace, fork.monitor);
+        const new_fork = forest.create_fork(left, right, fork.area, fork.root);
 
         if (is_left) {
             fork.left = Node.Node.fork(new_fork[1]);
