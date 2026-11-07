@@ -7,6 +7,7 @@ import { Tags } from './tags.js';
 import * as utils from './utils.js';
 const { monitorID, workspaceID } = lib;
 
+import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
@@ -19,6 +20,9 @@ import { Log } from './log.js';
 import { DEFAULT_HINT_COLOR } from './settings.js';
 
 const wom = global.workspace_manager;
+
+/** How long a window takes to fade in or out, in milliseconds */
+const FADE_DURATION = 150;
 
 export const window_tracker = Shell.WindowTracker.get_default();
 
@@ -117,6 +121,80 @@ export class ShellWindow {
 
     actor_exists(): boolean {
         return !this.destroying && this.meta.get_compositor_private<Meta.WindowActor | null>() !== null;
+    }
+
+    /*
+     * Whether the window is drawn. These are the only methods that change the visibility or the
+     * opacity of the window's actor, or fade between them, so that one set of rules applies to every
+     * change. Each does nothing if the window has no actor.
+     */
+
+    private actor(): Meta.WindowActor | null {
+        return this.meta.get_compositor_private<Meta.WindowActor | null>();
+    }
+
+    /** Fades the window in */
+    fade_in() {
+        const actor = this.actor();
+        if (!actor) return;
+        if (actor.visible && actor.opacity >= 255) return;
+
+        actor.remove_all_transitions();
+        if (actor.opacity > 250) actor.opacity = 0;
+        actor.show();
+        actor.ease({
+            opacity: 255,
+            duration: FADE_DURATION * (1 - actor.opacity / 255),
+            mode: Clutter.AnimationMode.EASE_OUT_QUART,
+        });
+    }
+
+    /** Fades the window out, then hides it */
+    fade_out() {
+        const actor = this.actor();
+        if (!actor?.visible) return;
+
+        actor.remove_all_transitions();
+        actor.ease({
+            opacity: 0,
+            duration: FADE_DURATION * (actor.opacity / 255),
+            mode: Clutter.AnimationMode.EASE_IN_QUART,
+            onComplete: () => {
+                actor.hide();
+                actor.opacity = 255;
+            },
+        });
+    }
+
+    /** Shows the window straight away */
+    show_now() {
+        const actor = this.actor();
+        if (!actor) return;
+
+        actor.remove_all_transitions();
+        actor.opacity = 255;
+        actor.show();
+    }
+
+    /** Hides the window straight away */
+    hide_now() {
+        const actor = this.actor();
+        if (!actor) return;
+
+        actor.remove_all_transitions();
+        actor.hide();
+        actor.opacity = 255;
+    }
+
+    /** Makes the window opaque, without changing whether it's shown */
+    restore_opacity() {
+        const actor = this.actor();
+        if (actor) actor.opacity = 255;
+    }
+
+    /** Stops every transition on the window, such as before moving it */
+    settle() {
+        this.actor()?.remove_all_transitions();
     }
 
     bind_window_events() {
@@ -297,7 +375,7 @@ export class ShellWindow {
             if (this.is_maximized()) {
                 meta.unmaximize();
             }
-            actor.remove_all_transitions();
+            this.settle();
 
             this.ext.movements.insert(this.entity, rect);
 

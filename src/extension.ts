@@ -267,7 +267,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                     return;
                 }
 
-                actor.remove_all_transitions();
+                window.settle();
                 const { x, y, width, height } = movement;
 
                 window.meta.move_resize_frame(true, x, y, width, height);
