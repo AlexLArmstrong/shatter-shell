@@ -848,7 +848,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                                 if (stack_info) {
                                     const leaf: node.NodeStack = stack_info[1].inner;
 
-                                    win.stack = attachment;
                                     node.stack_add(leaf, win);
                                     gnome_forest.update_stack(leaf);
                                     this.remember_place(win.entity);

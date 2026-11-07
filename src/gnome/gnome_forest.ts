@@ -49,9 +49,6 @@ export class GnomeForest {
 
         if (!a_fork || !b_fork) return;
 
-        const a_stack = a_win.stack,
-            b_stack = b_win.stack;
-
         if (a_win.stack !== null) {
             const stack = this.forest.stacks.get(a_win.stack);
             if (stack) {
@@ -80,9 +77,6 @@ export class GnomeForest {
 
         if (a_fn) a_fn();
         if (b_fn) b_fn();
-
-        a_win.stack = b_stack;
-        b_win.stack = a_stack;
 
         a_win.visibility.show_now();
         b_win.visibility.show_now();
@@ -221,10 +215,6 @@ export class GnomeForest {
         }
 
         for (const stack of this.forest.stacks.values()) stack.destroy();
-
-        for (const window of this.ext.windows.values()) {
-            window.stack = null;
-        }
 
         this.forest.stacks.truncate(0);
         this.ext.show_border_on_focused();
@@ -559,7 +549,6 @@ export class GnomeForest {
             // If the stack contains 1 item, unstack it
             const stack = branch.inner;
             if (stack.windows.length === 1) {
-                win.stack = null;
                 this.forest.stacks.remove(stack.idx)?.destroy();
                 fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
                 return node.Node.window(win);
@@ -570,8 +559,8 @@ export class GnomeForest {
 
         if (toggled && fork.left.is_window(win.entity)) {
             // Assign left window as stack.
-            win.stack = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
-            fork.left = node.Node.stacked(win, win.stack);
+            const idx = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
+            fork.left = node.Node.stacked(win, idx);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.left.is_in_stack(win.entity)) {
             const node = stack_toggle(fork, fork.left);
@@ -584,8 +573,8 @@ export class GnomeForest {
             }
         } else if (toggled && fork.right && fork.right.is_window(win.entity)) {
             // Assign right window as stack
-            win.stack = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
-            fork.right = node.Node.stacked(win, win.stack);
+            const idx = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
+            fork.right = node.Node.stacked(win, idx);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.right && fork.right.is_in_stack(win.entity)) {
             const node = stack_toggle(fork, fork.right);
@@ -596,14 +585,14 @@ export class GnomeForest {
     }
 
     stack_left(fork: Fork, window: MutterWindowHandle) {
-        window.stack = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
-        fork.left = node.Node.stacked(window, window.stack);
+        const idx = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
+        fork.left = node.Node.stacked(window, idx);
         fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
     }
 
     stack_right(fork: Fork, window: MutterWindowHandle) {
-        window.stack = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
-        fork.right = node.Node.stacked(window, window.stack);
+        const idx = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
+        fork.right = node.Node.stacked(window, idx);
         fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
     }
 
@@ -630,7 +619,6 @@ export class GnomeForest {
 
                 // Collect names of each entity in the stack
                 for (const window of stack.windows) {
-                    window.stack = stack.idx;
                     container.add(window);
                 }
 

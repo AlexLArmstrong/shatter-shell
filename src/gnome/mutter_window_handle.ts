@@ -19,6 +19,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import { Log } from '../log.js';
+import { NodeKind } from '../node.js';
 import { DEFAULT_HINT_COLOR } from '../settings.js';
 import { GnomeVisibility } from './gnome_visibility.js';
 
@@ -48,7 +49,6 @@ export class MutterWindowHandle implements WindowHandle {
     entity: Entity;
     meta: Meta.Window;
     ext: Ext;
-    stack: number | null = null;
     leaf: NodeLeaf | null = null;
     known_workspace: WorkspaceID;
     grab: boolean = false;
@@ -74,6 +74,10 @@ export class MutterWindowHandle implements WindowHandle {
     window_app: Shell.App;
 
     private border_size = 0;
+
+    get stack(): number | null {
+        return this.leaf?.kind === NodeKind.STACK ? this.leaf.idx : null;
+    }
 
     constructor(entity: Entity, window: Meta.Window, window_app: Shell.App, ext: Ext) {
         this.window_app = window_app;

@@ -155,8 +155,6 @@ export class Forest extends Ecs.World {
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
-                window.stack = stack.idx;
-
                 Node.stack_add(stack, window, !stack_from_left);
 
                 ext.gnome_forest?.update_stack(stack);
@@ -440,10 +438,6 @@ export class Forest extends Ecs.World {
             }
         }
 
-        if (stack_detach) {
-            ext.windows.with(window, w => (w.stack = null));
-        }
-
         if (reflow_fork && !stack_detach) {
             reflow_fork[1].rebalance_orientation();
         }
@@ -667,11 +661,6 @@ export class Forest extends Ecs.World {
             if (s) {
                 Node.stack_remove(this, stack, window);
             }
-        }
-
-        const win = ext.windows.get(window);
-        if (win) {
-            win.stack = null;
         }
     }
 
