@@ -178,7 +178,7 @@ export class GnomeTilingMode {
         if (!this.ext.gnome_forest) return null;
 
         const forest = this.ext.gnome_forest.forest;
-        const new_fork = forest.create_fork(left, right, fork.area, fork.workspace, fork.monitor);
+        const new_fork = forest.create_fork(left, right, fork.area, fork.tree);
 
         if (is_left) {
             fork.left = Node.Node.fork(new_fork[1]);

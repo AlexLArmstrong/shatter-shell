@@ -229,8 +229,8 @@ export class GnomeForest {
 
     /** Destroy all widgets owned by this object. Call before dropping. */
     destroy() {
-        for (const [, [fent]] of this.forest.trees_) {
-            for (const node of this.forest.iter(fent)) {
+        for (const fork of this.forest.trees()) {
+            for (const node of this.forest.iter(fork.entity)) {
                 if (node.is_leaf()) {
                     for (const window of node.inner.entities) {
                         this.forest.on_detach(window);

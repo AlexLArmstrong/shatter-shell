@@ -971,23 +971,21 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
 
         if (this.gnome_forest) {
-            for (const [entity, monitor] of this.gnome_forest.forest.trees_.values()) {
-                if (condition(monitor[1])) {
-                    const value = modify(monitor[1]);
-                    monitor[1] = value;
-                    let fork = this.gnome_forest.forest.forks.get(entity);
-                    if (fork) {
-                        fork.workspace = value;
-                        for (const child of this.gnome_forest.forest.iter(entity)) {
-                            if (child.inner.kind === node.NodeKind.FORK) {
-                                child.inner.fork.workspace = value;
-                            } else if (child.is_leaf()) {
-                                for (const entity of child.inner.entities) {
-                                    window_move(this, entity, value);
-                                }
+            // A snapshot, as moving windows may change the forest
+            const trees = Array.from(this.gnome_forest.forest.trees());
+            for (const fork of trees) {
+                if (condition(fork.workspace)) {
+                    // This moves the whole tree, as all of its forks share the tree
+                    const value = modify(fork.workspace);
+                    fork.workspace = value;
 
-                                this.gnome_forest.forest.view_of(child.inner)?.restack();
+                    for (const child of this.gnome_forest.forest.iter(fork.entity)) {
+                        if (child.is_leaf()) {
+                            for (const entity of child.inner.entities) {
+                                window_move(this, entity, value);
                             }
+
+                            this.gnome_forest.forest.view_of(child.inner)?.restack();
                         }
                     }
                 }
@@ -1426,9 +1424,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         const update_tiling = () => {
             if (!this.gnome_forest) return;
 
-            for (const f of this.gnome_forest.forest.forks.values()) {
-                if (!f.is_root) continue;
-
+            for (const f of this.gnome_forest.forest.trees()) {
                 const area = this.monitor_work_area(f.monitor);
 
                 f.smart_gapped = false;
@@ -1525,8 +1521,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             (() => {
                 if (!this.gnome_forest) return;
 
-                const trees = Array.from(forest.forks.values()).filter(f => f.is_root);
-                const migrations = plan_migrations(trees, changes, this.displays[1]);
+                const migrations = plan_migrations(forest.trees(), changes, this.displays[1]);
 
                 for (const migration of migrations) {
                     if (migration.moved) migration.tree.workspace = 0;
