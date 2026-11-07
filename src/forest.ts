@@ -196,8 +196,6 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
-                window.stack = stack.idx;
-
                 Node.stack_add(stack, new_entity, !stack_from_left);
 
                 this.on_attach(new_entity);
@@ -496,10 +494,6 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
             }
         }
 
-        if (stack_detach) {
-            ext.windows.with(window, w => (w.stack = null));
-        }
-
         this.on_detach(window);
 
         if (reflow_fork && !stack_detach) {
@@ -747,11 +741,6 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
             if (s) {
                 Node.stack_remove(this, stack, window);
             }
-        }
-
-        const win = ext.windows.get(window);
-        if (win) {
-            win.stack = null;
         }
     }
 

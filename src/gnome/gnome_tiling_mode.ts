@@ -287,8 +287,6 @@ export class GnomeTilingMode {
         Node.stack_remove(this.ext.gnome_forest.forest, inner, focused.entity);
         this.ext.gnome_forest.detach_window(focused.entity);
 
-        focused.stack = null;
-
         if (fork.right) {
             let left, right;
             if (reverse) {
@@ -348,7 +346,6 @@ export class GnomeTilingMode {
 
         const detach = (orientation: Clutter.Orientation, reverse: boolean) => {
             if (!this.ext.gnome_forest) return;
-            focused.stack = null;
 
             if (fork.right) {
                 let left, right;
@@ -571,7 +568,6 @@ export class GnomeTilingMode {
 
                             if (fork.left.inner.kind === Node.NodeKind.STACK) {
                                 Node.stack_remove(gnome_forest.forest, fork.left.inner, focused.entity);
-                                focused.stack = null;
                             } else {
                                 const temp = fork.right;
 

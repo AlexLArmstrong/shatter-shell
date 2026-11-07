@@ -18,6 +18,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import { Log } from '../log.js';
+import { NodeKind } from '../node.js';
 import { DEFAULT_HINT_COLOR } from '../settings.js';
 import { GnomeVisibility } from './gnome_visibility.js';
 
@@ -47,7 +48,6 @@ export class MutterWindowHandle implements WindowHandle {
     entity: Entity;
     meta: Meta.Window;
     ext: Ext;
-    stack: number | null = null;
     known_workspace: WorkspaceID;
     grab: boolean = false;
     activate_after_move: boolean = false;
@@ -72,6 +72,12 @@ export class MutterWindowHandle implements WindowHandle {
     window_app: Shell.App;
 
     private border_size = 0;
+
+    /** The stack that the window is in, if any, as the tree has it */
+    get stack(): number | null {
+        const leaf = this.ext.gnome_forest?.forest.leaf_of(this.entity);
+        return leaf?.kind === NodeKind.STACK ? leaf.idx : null;
+    }
 
     constructor(entity: Entity, window: Meta.Window, window_app: Shell.App, ext: Ext) {
         this.window_app = window_app;
