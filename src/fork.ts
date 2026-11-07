@@ -5,6 +5,7 @@ import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Node, NodeLeaf, TabBars } from './node.js';
+import type { Tree } from './tree.js';
 
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import * as node from './node.js';
@@ -16,9 +17,11 @@ const YPOS = 'y' as const;
 const WIDTH = 'width' as const;
 const HEIGHT = 'height' as const;
 
-/** A tiling fork contains two children nodes.
+/**
+ * A tiling fork contains two children nodes, which may either be leaves or sub-forks.
  *
- * These nodes may either be windows, or sub-forks.
+ * Only the root fork of a tree may have just one child, its left: a fork below it that is left with
+ * one child is replaced by that child.
  */
 export class Fork {
     private _left: Node;
@@ -29,12 +32,10 @@ export class Fork {
     area: Mtk.Rectangle;
     entity: Entity;
     detached: boolean = false;
-    on_primary_display: boolean;
-    workspace: WorkspaceID;
+    readonly tree: Tree;
     length_left: number;
     prev_length_left: number;
     prev_ratio: number = 0.5;
-    monitor: MonitorID;
     minimum_ratio: number = 0.1;
     orientation;
 
@@ -51,22 +52,43 @@ export class Fork {
         left: Node,
         right: Node | null,
         area: Mtk.Rectangle,
-        workspace: WorkspaceID,
-        monitor: MonitorID,
+        tree: Tree,
         orientation = Clutter.Orientation.HORIZONTAL,
     ) {
-        this.on_primary_display = global.display.get_primary_monitor() === monitor;
         this.area = area;
         this._left = left;
         this._right = right;
         this.hold(left);
         if (right) this.hold(right);
-        this.workspace = workspace;
+        this.tree = tree;
         this.length_left = orientation === Clutter.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
         this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orientation;
-        this.monitor = monitor;
+    }
+
+    get workspace(): WorkspaceID {
+        return this.tree.workspace;
+    }
+
+    set workspace(workspace: WorkspaceID) {
+        this.tree.workspace = workspace;
+    }
+
+    get monitor(): MonitorID {
+        return this.tree.monitor;
+    }
+
+    set monitor(monitor: MonitorID) {
+        this.tree.monitor = monitor;
+    }
+
+    get on_primary_display(): boolean {
+        return this.tree.on_primary_display;
+    }
+
+    set on_primary_display(primary: boolean) {
+        this.tree.on_primary_display = primary;
     }
 
     get left(): Node {
@@ -207,13 +229,6 @@ export class Fork {
         return this;
     }
 
-    /** Makes this fork the root of a tree, and records it in the forest */
-    set_root(tiler: Forest, entity: Entity, string: string, id: MonitorWorkspaceID): Fork {
-        this.is_root = true;
-        tiler.trees.set(string, [entity, id]);
-        return this;
-    }
-
     /** Calculates the future arrangement of windows in this fork */
     measure(
         tiler: Forest,
@@ -300,16 +315,10 @@ export class Fork {
 
             const blocked = [];
 
-            forest.trees.set(forest.string_reps.get(this.entity)!, [this.entity, [monitor, workspace]]);
-
             for (const child of forest.iter(this.entity)) {
                 switch (child.inner.kind) {
                     case NodeKind.FORK:
-                        const cfork = child.inner.fork;
-                        if (cfork.detached) continue;
-                        cfork.workspace = workspace;
-                        cfork.monitor = monitor;
-                        cfork.on_primary_display = primary;
+                        // Its monitor and workspace are the tree's, which have already changed
                         break;
                     case NodeKind.LEAF:
                         for (const window of child.inner.windows) {
