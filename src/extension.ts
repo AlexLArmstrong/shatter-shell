@@ -947,78 +947,24 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    on_workspace_index_changed(prev: WorkspaceID, next: WorkspaceID) {
-        this.on_workspace_modify(
-            current => current == prev,
-            () => next,
-        );
-    }
+    /** Restacks after mutter removes a workspace, and forgets the windows that are gone */
+    on_workspace_removed(_number: number) {
+        this.gnome_forest?.forest.note_removed_workspaces();
+        this.restack();
 
-    on_workspace_modify(
-        condition: (current: WorkspaceID) => boolean,
-        modify: (current: WorkspaceID) => WorkspaceID,
-        change_workspace: boolean = false,
-    ) {
-        function window_move(ext: Ext, entity: Entity, ws: WorkspaceID) {
-            if (change_workspace) {
-                const window = ext.windows.get(entity);
-                if (!window || !window.actor_exists() || window.meta.is_on_all_workspaces()) return;
+        // Fix phantom apps in dash
+        const to_delete = [];
+        for (const [entity, window] of this.windows.iter()) {
+            if (window.actor_exists()) continue;
 
-                ext.size_signals_block(window);
-                window.meta.change_workspace_by_index(ws, false);
-                ext.size_signals_unblock(window);
+            if (this.gnome_forest) {
+                this.gnome_forest.detach_window(entity);
+            } else {
+                to_delete.push(entity);
             }
         }
 
-        if (this.gnome_forest) {
-            // A snapshot, as moving windows may change the forest
-            const trees = Array.from(this.gnome_forest.forest.trees());
-            for (const { root: fork } of trees) {
-                if (condition(fork.workspace)) {
-                    // This moves the whole tree, as all of its forks share the tree
-                    const value = modify(fork.workspace);
-                    fork.workspace = value;
-
-                    for (const child of this.gnome_forest.forest.iter(fork.entity)) {
-                        if (child.is_leaf()) {
-                            for (const entity of child.inner.entities) {
-                                window_move(this, entity, value);
-                            }
-
-                            this.gnome_forest.forest.view_of(child.inner)?.restack();
-                        }
-                    }
-                }
-            }
-
-            // Fix phantom apps in dash
-            for (const window of this.windows.values()) {
-                if (!window.actor_exists()) this.gnome_forest.detach_window(window.entity);
-            }
-        } else {
-            const to_delete = [];
-
-            for (const [entity, window] of this.windows.iter()) {
-                if (!window.actor_exists()) {
-                    to_delete.push(entity);
-                    continue;
-                }
-
-                const ws = window.workspace_id();
-                if (condition(ws)) {
-                    window_move(this, entity, modify(ws));
-                }
-            }
-
-            for (const e of to_delete) this.delete_entity(e);
-        }
-    }
-
-    on_workspace_removed(number: number) {
-        this.on_workspace_modify(
-            current => current > number,
-            prev => workspaceID(prev - 1),
-        );
+        for (const entity of to_delete) this.delete_entity(entity);
     }
 
     restack() {
@@ -1059,20 +1005,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         const workspace_manager = wom;
-
-        for (const [, ws] of iter_workspaces(workspace_manager)) {
-            let index = workspaceID(ws.index());
-
-            this.signals.connect_with(ws, () =>
-                ws.connect('notify::workspace-index', () => {
-                    if (ws !== null) {
-                        const new_index = workspaceID(ws.index());
-                        this.on_workspace_index_changed(index, new_index);
-                        index = new_index;
-                    }
-                }),
-            );
-        }
 
         this.signals.connect_with(display, () =>
             display.connect('workareas-changed', () => {
@@ -1525,7 +1457,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 const migrations = plan_migrations(forest.trees(), changes, this.displays[1]);
 
                 for (const migration of migrations) {
-                    if (migration.moved) migration.tree.workspace = 0;
+                    if (migration.moved) migration.tree.root.workspace = 0;
                     mark_for_reassignment(this, migration.tree.root.entity);
                 }
 
@@ -1712,15 +1644,5 @@ export default class ShatterShellExtension extends Extension {
         }
 
         Log.settings = null;
-    }
-}
-
-function* iter_workspaces(manager: Meta.WorkspaceManager) {
-    let idx = 0;
-    let ws = manager.get_workspace_by_index(idx);
-    while (ws !== null) {
-        yield [idx, ws] as const;
-        idx += 1;
-        ws = manager.get_workspace_by_index(idx);
     }
 }

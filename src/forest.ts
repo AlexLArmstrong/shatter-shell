@@ -355,7 +355,9 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
     }
 
     add_tree(window: Entity, area: Mtk.Rectangle, id: MonitorWorkspaceID): Fork.Tree {
-        const tree = new Fork.Tree(id[0], id[1]);
+        const manager = global.workspace_manager;
+        const workspace = manager.get_workspace_by_index(id[1]) ?? manager.get_active_workspace();
+        const tree = new Fork.Tree(id[0], workspace);
         [, tree.root] = this.create_fork(Node.Node.window(window), null, area, tree);
         this.trees_.add(tree);
 
@@ -458,13 +460,27 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         return this.trees_;
     }
 
+    /**
+     * Marks the trees whose workspace mutter has just removed, as it no longer has an index. Call this
+     * once a workspace is removed.
+     */
+    note_removed_workspaces() {
+        const manager = global.workspace_manager;
+        const present = new Set<Meta.Workspace>();
+        for (let idx = 0; idx < manager.get_n_workspaces(); idx += 1) {
+            const workspace = manager.get_workspace_by_index(idx);
+            if (workspace) present.add(workspace);
+        }
+
+        for (const tree of this.trees_) {
+            if (!present.has(tree.workspace)) tree.workspace_removed = true;
+        }
+    }
+
     /** Finds the tree on a monitor and workspace */
     find_tree([src_mon, src_work]: MonitorWorkspaceID): Fork.Tree | null {
         for (const tree of this.trees()) {
-            const { monitor, workspace } = tree;
-            if (monitor == src_mon && workspace == src_work) {
-                return tree;
-            }
+            if (tree.monitor == src_mon && tree.is_on(src_work)) return tree;
         }
 
         return null;
