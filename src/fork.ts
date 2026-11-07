@@ -19,9 +19,6 @@ const HEIGHT = 'height' as const;
 
 /** The links back up a tree, which its forks keep in step with their branches */
 export interface TreeLinks {
-    /** The fork with this entity */
-    fork(entity: Entity): Fork | null;
-
     /** The leaf that holds each tiled window */
     readonly leaves: Ecs.Storage<NodeLeaf>;
 }
@@ -39,6 +36,11 @@ export class Fork {
 
     area: Mtk.Rectangle;
     entity: Entity;
+    /**
+     * Whether the fork has left the tree, and its entity been deleted. A node of the tree that still
+     * links to it is out of date, so walks of the tree skip it, as they did when they looked it up.
+     */
+    detached: boolean = false;
     on_primary_display: boolean;
     workspace: WorkspaceID;
     length_left: number;
@@ -126,8 +128,7 @@ export class Fork {
         inner.parent = this;
         switch (inner.kind) {
             case NodeKind.FORK:
-                const child = this.links.fork(inner.entity);
-                if (child) child.parent = this;
+                inner.fork.parent = this;
                 break;
             case NodeKind.STACK:
                 for (const window of inner.entities) this.hold_window(inner, window);
@@ -141,8 +142,7 @@ export class Fork {
         inner.parent = null;
         switch (inner.kind) {
             case NodeKind.FORK:
-                const child = this.links.fork(inner.entity);
-                if (child?.parent === this) child.parent = null;
+                if (inner.fork.parent === this) inner.fork.parent = null;
                 break;
             case NodeKind.STACK:
                 for (const window of inner.entities) this.let_go_window(inner, window);
@@ -321,8 +321,8 @@ export class Fork {
             for (const child of forest.iter(this.entity)) {
                 switch (child.inner.kind) {
                     case NodeKind.FORK:
-                        const cfork = forest.forks.get(child.inner.entity);
-                        if (!cfork) continue;
+                        const cfork = child.inner.fork;
+                        if (cfork.detached) continue;
                         cfork.workspace = workspace;
                         cfork.monitor = monitor;
                         cfork.on_primary_display = primary;
@@ -408,7 +408,7 @@ function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
             if (!branch.inner.tabbed) return window_minimum_size(ext, branch.inner.entities[0]!);
             return stack_minimum_size(ext, branch.inner.entities);
         case NodeKind.FORK:
-            return fork_minimum_size(ext, tiler, branch.inner.entity);
+            return fork_minimum_size(ext, tiler, branch.inner.fork);
     }
 }
 
@@ -429,9 +429,8 @@ function stack_minimum_size(ext: Ext, entities: Entity[]): [number, number] {
 }
 
 /** Gets the fork's minimum size based on its left and right nodes. */
-function fork_minimum_size(ext: Ext, tiler: Forest, entity: Entity): [number, number] {
-    const fork = tiler.forks.get(entity);
-    if (!fork) return [0, 0];
+function fork_minimum_size(ext: Ext, tiler: Forest, fork: Fork): [number, number] {
+    if (fork.detached) return [0, 0];
 
     const [left_width, left_height] = minimum_size(tiler, ext, fork.left);
     if (!fork.right) return [left_width, left_height];

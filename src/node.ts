@@ -27,10 +27,9 @@ function node_kind_as_string(kind: NodeKind): string {
     }
 }
 
-/** Identifies this node as a fork */
 export interface NodeFork {
     kind: NodeKind.FORK;
-    entity: Entity;
+    fork: Fork;
     /** The fork whose branch this is, kept by {@link Fork} */
     parent: Fork | null;
 }
@@ -188,8 +187,8 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Create a fork variant of a `Node` */
-    static fork(entity: Entity): Node<NodeFork> {
-        return new Node({ kind: NodeKind.FORK, entity, parent: null });
+    static fork(fork: Fork): Node<NodeFork> {
+        return new Node({ kind: NodeKind.FORK, fork, parent: null });
     }
 
     /** Creates a leaf of one window, without tabs */
@@ -211,7 +210,7 @@ export class Node<T extends NodeADT = NodeADT> {
         let fmt = `Node{\n    kind: ${node_kind_as_string(this.inner.kind)},\n`;
         switch (this.inner.kind) {
             case NodeKind.FORK:
-                fmt += `    entity: (${this.inner.entity})\n  }`;
+                fmt += `    entity: (${this.inner.fork.entity})\n  }`;
                 break;
             case NodeKind.STACK:
                 fmt += `    tabbed: ${this.inner.tabbed}, entities: ${this.inner.entities}\n  }`;
@@ -237,7 +236,7 @@ export class Node<T extends NodeADT = NodeADT> {
 
     /** Asks if this fork is the fork we are looking for */
     is_fork(entity: Entity): boolean {
-        return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.entity, entity);
+        return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.fork.entity, entity);
     }
 
     /** Whether this is a leaf without tabs, which holds only this window */
@@ -260,8 +259,8 @@ export class Node<T extends NodeADT = NodeADT> {
     ) {
         switch (this.inner.kind) {
             case NodeKind.FORK:
-                const fork = tiler.forks.get(this.inner.entity);
-                if (fork) {
+                const fork = this.inner.fork;
+                if (!fork.detached) {
                     fork.measure(tiler, ext, area, record);
                 }
 

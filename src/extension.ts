@@ -980,8 +980,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         fork.workspace = value;
                         for (const child of this.gnome_forest.forest.iter(entity)) {
                             if (child.inner.kind === node.NodeKind.FORK) {
-                                fork = this.gnome_forest.forest.forks.get(child.inner.entity);
-                                if (fork) fork.workspace = value;
+                                child.inner.fork.workspace = value;
                             } else if (child.is_leaf()) {
                                 for (const entity of child.inner.entities) {
                                     window_move(this, entity, value);
