@@ -1552,23 +1552,20 @@ export class Ext extends Ecs.System<ExtEvent> {
         );
     }
 
+    /**
+     * Places every stack's tab bar after a workspace switch, once, when the main loop is next idle.
+     * Each stack also places its own on every restack. Mutter shows every window of the new
+     * workspace, and each window that a stack hides hides itself again.
+     */
     restack() {
-        // NOTE: Workaround for GNOME Shell showing our hidden windows on a workspace switch
-        let attempts = 0;
-        const source = GLib.timeout_add(GLib.PRIORITY_LOW, 50, () => {
+        const source = GLib.idle_add(GLib.PRIORITY_LOW, () => {
+            this.timeouts.delete(source);
             if (this.auto_tiler) {
                 for (const container of this.auto_tiler.forest.stacks.values()) {
                     container.restack();
                 }
             }
-
-            if (attempts < 10) {
-                ++attempts;
-                return GLib.SOURCE_CONTINUE;
-            } else {
-                this.timeouts.delete(source);
-                return GLib.SOURCE_REMOVE;
-            }
+            return GLib.SOURCE_REMOVE;
         });
         this.timeouts.add(source);
     }
@@ -1893,6 +1890,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             }
         });
         this.tilable_window_signals.clear();
+
+        for (const win of this.windows.values()) win.unwatch_shows();
 
         for (const [_meta, tag] of this.size_requests) {
             GLib.source_remove(tag);

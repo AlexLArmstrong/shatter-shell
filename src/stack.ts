@@ -305,8 +305,9 @@ export class Stack {
     }
 
     /**
-     * Shows the active tab's window and hides the others, and marks the active tab. Windows on another
-     * workspace are shown by mutter along with it, so the tab bar only shows where the stack may.
+     * Has each window work out again whether it's shown, which the leaf decides, and marks the active
+     * tab. Windows on another workspace are shown by mutter along with it, so the tab bar only shows
+     * where the stack may.
      *
      * The windows of tabs that were only just added change straight away rather than fade, so that a
      * window joining the stack behind the active one is never seen.
@@ -320,15 +321,7 @@ export class Stack {
             this.window_exec(tab, tab.entity, window => {
                 const active = Ecs.entity_eq(tab.entity, this.active);
                 const is_new = added.some(entity => Ecs.entity_eq(entity, tab.entity));
-
-                if (active) {
-                    if (is_new) window.show_now();
-                    else window.fade_in();
-                } else if (is_new) {
-                    window.hide_now();
-                } else {
-                    window.fade_out();
-                }
+                window.update_visibility(!is_new);
 
                 this.buttons.get(tab.button)?.set_active(active ? TabActive.active : TabActive.inactive);
             });
@@ -393,10 +386,14 @@ export class Stack {
         }
     }
 
-    /** Disconnects a tab from the stack, and fades its window back in if the stack is on the active workspace */
+    /**
+     * Disconnects a tab from the stack, and has its window work out again whether it's shown. As it
+     * has left the stack, or the stack is gone, it's faded in if it can be shown, and otherwise shown
+     * by mutter along with its workspace.
+     */
     tab_disconnect(c: Tab) {
         this.unwatch(c);
-        if (this.workspace === this.ext.active_workspace()) this.ext.windows.get(c.entity)?.fade_in();
+        this.ext.windows.get(c.entity)?.update_visibility();
     }
 
     /** Disconnects the signals of a tab, without changing whether its window is shown */
@@ -423,7 +420,7 @@ export class Stack {
         global.display.disconnect(this.focus_watcher);
         this.unfollow();
 
-        // Disconnect stack signals from each window, which also unhides them
+        // Disconnect stack signals from each window, which also hands them back, wherever they are
         for (const c of this.tabs) this.tab_disconnect(c);
 
         for (const b of this.buttons.values()) {
@@ -548,8 +545,9 @@ export class Stack {
     }
 
     /**
-     * Places the tab bar, and shows it only where the stack may show. It also shows the active tab's
-     * window and hides the others again, as mutter shows every window of a workspace on entering it.
+     * Places the tab bar, and shows it only where the stack may show. This never changes which windows
+     * are shown: they do that themselves when the leaf changes, and hide again when mutter shows them,
+     * such as on entering their workspace.
      */
     restack() {
         this.on_grab(() => {
@@ -560,8 +558,6 @@ export class Stack {
             this.widgets.tabs.visible = permitted;
 
             if (permitted) this.reposition();
-
-            this.show_active([]);
         });
     }
 

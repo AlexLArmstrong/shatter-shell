@@ -235,9 +235,12 @@ export class AutoTiler {
             }
         }
 
-        for (const stack of this.forest.stacks.values()) stack.destroy();
-
+        // Forget the stacks before destroying them, so that their windows no longer find themselves in
+        // one, and show again
+        const stacks = Array.from(this.forest.stacks.values());
         this.forest.stacks.truncate(0);
+        for (const stack of stacks) stack.destroy();
+
         ext.show_border_on_focused();
     }
 

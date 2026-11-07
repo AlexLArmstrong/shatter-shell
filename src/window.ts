@@ -1,6 +1,7 @@
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 
+import * as Ecs from './ecs.js';
 import * as focus from './focus.js';
 import * as lib from './lib.js';
 import { Tags } from './tags.js';
@@ -87,6 +88,9 @@ export class ShellWindow {
     /** Whether the latest of those decisions hides the window, once its fade completes */
     private fade_hides = false;
 
+    /** The handler that hides the window's actor again when mutter shows it while its stack hides it */
+    private show_watcher: [Meta.WindowActor, SignalID] | null = null;
+
     constructor(entity: Entity, window: Meta.Window, window_app: Shell.App, ext: Ext) {
         this.window_app = window_app;
 
@@ -147,6 +151,62 @@ export class ShellWindow {
 
     private actor(): Meta.WindowActor | null {
         return this.meta.get_compositor_private<Meta.WindowActor | null>();
+    }
+
+    /**
+     * Whether the window is an inactive tab of a stack, which hides it. This is worked out from the
+     * tree whenever it's asked, so that a window that has left its stack, or whose stack is gone, is
+     * never kept hidden, whichever way it left.
+     */
+    hidden_by_stack(): boolean {
+        const tiler = this.ext.auto_tiler;
+        const leaf = tiler?.find_stack(this.entity)?.[1].inner;
+        if (!tiler || !leaf || !tiler.forest.stacks.get(leaf.idx)) return false;
+        return !Ecs.entity_eq(leaf.active, this.entity);
+    }
+
+    /**
+     * Shows the window if it may be shown and no stack hides it, and hides it otherwise. Call this
+     * whenever that may have changed, such as when the window joins or leaves a stack, or its stack
+     * shows another window. It fades, unless `animate` is false.
+     */
+    update_visibility(animate: boolean = true) {
+        if (this.hidden_by_stack()) {
+            this.watch_shows();
+            if (animate) this.fade_out();
+            else this.hide_now();
+        } else if (animate) {
+            this.fade_in();
+        } else {
+            this.show_now();
+        }
+    }
+
+    /**
+     * Mutter shows every window of a workspace on entering it, and a window that is unminimized, so
+     * hide the window again straight away whenever that happens while a stack hides it.
+     */
+    private watch_shows() {
+        const actor = this.actor();
+        if (!actor || this.show_watcher?.[0] === actor) return;
+
+        this.unwatch_shows();
+        this.show_watcher = [
+            actor,
+            actor.connect('show', () => {
+                if (this.hidden_by_stack()) this.hide_now();
+            }),
+        ];
+    }
+
+    /** Stops hiding the window again when mutter shows it, such as when the extension is disabled */
+    unwatch_shows() {
+        if (!this.show_watcher) return;
+
+        const [actor, signal] = this.show_watcher;
+        // A destroyed actor has already lost its signals
+        if (this.actor() === actor) actor.disconnect(signal);
+        this.show_watcher = null;
     }
 
     /** Records a new decision about whether the window is drawn, superseding any running fade */
