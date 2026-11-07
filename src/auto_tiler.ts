@@ -560,7 +560,7 @@ export class AutoTiler {
 
         if (toggled && fork.left.is_window(win.entity)) {
             // Assign left window as stack.
-            win.stack = this.forest.stacks.insert(new Stack(ext, win.entity, fork.workspace, fork.monitor));
+            win.stack = this.forest.stacks.insert(new Stack(ext, win.entity, fork.workspace));
             fork.left = node.Node.stacked(win.entity, win.stack);
             fork.measure(this.forest, ext, fork.area, this.forest.on_record());
         } else if (fork.left.is_in_stack(win.entity)) {
@@ -574,7 +574,7 @@ export class AutoTiler {
             }
         } else if (toggled && fork.right && fork.right.is_window(win.entity)) {
             // Assign right window as stack
-            win.stack = this.forest.stacks.insert(new Stack(ext, win.entity, fork.workspace, fork.monitor));
+            win.stack = this.forest.stacks.insert(new Stack(ext, win.entity, fork.workspace));
             fork.right = node.Node.stacked(win.entity, win.stack);
             fork.measure(this.forest, ext, fork.area, this.forest.on_record());
         } else if (fork.right && fork.right.is_in_stack(win.entity)) {
@@ -586,13 +586,13 @@ export class AutoTiler {
     }
 
     stack_left(ext: Ext, fork: Fork, window: ShellWindow) {
-        window.stack = this.forest.stacks.insert(new Stack(ext, window.entity, fork.workspace, fork.monitor));
+        window.stack = this.forest.stacks.insert(new Stack(ext, window.entity, fork.workspace));
         fork.left = node.Node.stacked(window.entity, window.stack);
         fork.measure(this.forest, ext, fork.area, this.forest.on_record());
     }
 
     stack_right(ext: Ext, fork: Fork, window: ShellWindow) {
-        window.stack = this.forest.stacks.insert(new Stack(ext, window.entity, fork.workspace, fork.monitor));
+        window.stack = this.forest.stacks.insert(new Stack(ext, window.entity, fork.workspace));
         fork.right = node.Node.stacked(window.entity, window.stack);
         fork.measure(this.forest, ext, fork.area, this.forest.on_record());
     }

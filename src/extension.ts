@@ -1520,8 +1520,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                             } else if (child.inner.kind === node.NodeKind.STACK) {
                                 const stack = this.auto_tiler.forest.stacks.get(child.inner.idx);
                                 if (stack) {
-                                    stack.workspace = value;
-
                                     for (const entity of child.inner.entities) {
                                         window_move(this, entity, value);
                                     }

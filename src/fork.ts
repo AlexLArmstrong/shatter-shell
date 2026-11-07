@@ -304,11 +304,6 @@ export class Fork {
                         break;
                     case NodeKind.STACK:
                         for (const entity of child.inner.entities) {
-                            const stack = ext.auto_tiler.forest.stacks.get(child.inner.idx);
-                            if (stack) {
-                                stack.workspace = workspace;
-                            }
-
                             const window = ext.windows.get(entity);
 
                             if (window) {
