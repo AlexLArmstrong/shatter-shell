@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Meta from 'gi://Meta';
 import Mtk from 'gi://Mtk';
 
 import type { Entity } from './ecs.js';
@@ -14,6 +15,7 @@ import * as node from './node.js';
 import { Result, Ok, Err } from './result.js';
 import { Stack } from './stack.js';
 import * as tiling from './tiling.js';
+import * as WorkspaceEvents from './workspace_events.js';
 
 const { NodeKind } = node;
 import { Log } from './log.js';
@@ -236,6 +238,92 @@ export class AutoTiler {
         for (const stack of stacks) stack.destroy();
 
         ext.show_border_on_focused();
+    }
+
+    /**
+     * Brings every tree up to date with what happened to the workspaces, which workspace_events.ts
+     * works out from where mutter has the trees' windows now. Running it again changes nothing.
+     */
+    handle_workspace_changes(ext: Ext) {
+        for (const event of WorkspaceEvents.analyze(this.workspace_snapshot(ext))) {
+            switch (event.kind) {
+                case 'inserted': {
+                    // Every target is looked up before any tree moves, as they move along a chain
+                    const moves = event.trees.map(
+                        ([fork, index]) => [fork, global.workspace_manager.get_workspace_by_index(index)] as const,
+                    );
+                    for (const [fork, workspace] of moves) {
+                        if (workspace) fork.root.workspace = workspace;
+                    }
+                    break;
+                }
+
+                case 'removed': {
+                    // The tree moves whole if nothing is tiled there yet, and its windows join the tree there otherwise
+                    const fork = event.fork;
+                    if (fork.detached) break;
+                    if (this.forest.find_toplevel([fork.monitor, lib.workspaceID(event.to.index())]) === null) {
+                        fork.root.workspace = event.to;
+                    } else {
+                        for (const branch of Array.from(this.forest.iter(fork.entity))) {
+                            if (!branch.is_leaf()) continue;
+                            for (const entity of Array.from(branch.inner.entities)) {
+                                const window = ext.windows.get(entity);
+                                if (window) this.retile_on_its_workspace(ext, window);
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case 'window_moved':
+                    this.retile_on_its_workspace(ext, event.window);
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Where every tree is, and where mutter has each of its windows. Windows on all workspaces are
+     * left out, as mutter says they're on whichever is active.
+     */
+    private workspace_snapshot(ext: Ext): Array<WorkspaceEvents.TreeState> {
+        const manager = global.workspace_manager;
+        const indices = new Map<Meta.Workspace, number>();
+        for (let idx = 0; idx < manager.get_n_workspaces(); idx += 1) {
+            const workspace = manager.get_workspace_by_index(idx);
+            if (workspace) indices.set(workspace, idx);
+        }
+
+        const trees: Array<WorkspaceEvents.TreeState> = [];
+        for (const [, fork] of this.forest.toplevels()) {
+            const windows: Array<WorkspaceEvents.WindowState> = [];
+            for (const branch of this.forest.iter(fork.entity)) {
+                if (!branch.is_leaf()) continue;
+
+                for (const entity of branch.inner.entities) {
+                    const window = ext.windows.get(entity);
+                    if (!window?.actor_exists() || window.meta.is_on_all_workspaces()) continue;
+
+                    const workspace = window.meta.get_workspace();
+                    windows.push({ window, workspace, index: indices.get(workspace) ?? -1 });
+                }
+            }
+
+            trees.push({ fork, index: indices.get(fork.root.workspace) ?? -1, windows });
+        }
+
+        return trees;
+    }
+
+    /** Takes a window out of its tree, and tiles it on the workspace where mutter has it now */
+    private retile_on_its_workspace(ext: Ext, window: ShellWindow) {
+        if (window.is_tilable()) {
+            this.detach_window(ext, window.entity, false);
+            this.attach_to_workspace(ext, window, ext.workspace_id(window));
+        } else {
+            this.detach_window(ext, window.entity);
+        }
     }
 
     /**

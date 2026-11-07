@@ -169,6 +169,9 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Misc GLib timeouts that will need to be removed when the extension is `disable`d. */
     readonly timeouts = new Set<number>();
 
+    /** The pending update of the trees after workspace changes, if one has been asked for */
+    private workspace_changes: number | null = null;
+
     /** The window that was focused before the last window */
     private prev_focused: [Entity | null, Entity | null] = [null, null];
 
@@ -1417,16 +1420,17 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     /** Handle workspace change events */
+    /**
+     * Handles a window that mutter moved to another workspace. A tiled one's tree is brought up to
+     * date once the workspace changes have settled, as one move may be part of a larger change, such
+     * as a workspace being inserted or removed.
+     */
     on_workspace_changed(win: Window.ShellWindow) {
         if (this.auto_tiler && !this.contains_tag(win.entity, Tags.Floating)) {
-            const id = this.workspace_id(win);
-            const [monitor, workspace] = this.placement(win);
-            const tiled = this.auto_tiler.attached.contains(win.entity);
-            if (!tiled || id[0] != monitor || id[1] != workspace) {
-                if (win.is_tilable()) {
-                    this.auto_tiler.detach_window(this, win.entity, false);
-                    this.auto_tiler.attach_to_workspace(this, win, id);
-                }
+            if (this.auto_tiler.attached.contains(win.entity)) {
+                this.schedule_workspace_changes();
+            } else if (win.is_tilable()) {
+                this.auto_tiler.attach_to_workspace(this, win, this.workspace_id(win));
             }
 
             if (win.meta.minimized) {
@@ -1443,6 +1447,7 @@ export class Ext extends Ecs.System<ExtEvent> {
      */
     on_workspace_removed(_number: number) {
         this.restack();
+        this.schedule_workspace_changes();
 
         // Fix phantom apps in dash
         const to_delete = [];
@@ -1457,6 +1462,26 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
 
         for (const entity of to_delete) this.delete_entity(entity);
+    }
+
+    /**
+     * Brings the trees up to date with what happened to the workspaces, once, when the main loop is
+     * next idle, by which time the signals for one change have all arrived. Asking again before then
+     * changes nothing, and what happened is worked out from how things are by then, so the signals
+     * that ask for it may come in any order.
+     */
+    schedule_workspace_changes() {
+        if (this.workspace_changes !== null) return;
+
+        const source = GLib.idle_add(GLib.PRIORITY_LOW, () => {
+            this.workspace_changes = null;
+            this.timeouts.delete(source);
+            this.auto_tiler?.handle_workspace_changes(this);
+            return GLib.SOURCE_REMOVE;
+        });
+
+        this.workspace_changes = source;
+        this.timeouts.add(source);
     }
 
     /**
@@ -1795,6 +1820,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             GLib.source_remove(tag);
         }
         this.timeouts.clear();
+        this.workspace_changes = null;
 
         this.unset_grab_op();
 

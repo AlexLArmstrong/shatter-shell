@@ -68,6 +68,9 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 ### Workspaces
 
 - [ ] Removing a workspace in the middle, and reordering workspaces by dragging them in the overview, keeps the windows of every other workspace tiled together, and new windows on any of them tile with that workspace's windows. Check with static workspaces too.
+- [ ] Removing a workspace with tiled windows moves them into the tiling of the workspace that GNOME moves them to. If that workspace had no tiled windows on that monitor, they keep their layout.
+- [ ] Dropping a window between two workspaces in the overview, which creates a workspace there, keeps the layout of every workspace after it, and tiles the dropped window on its own in the new one. Try it with the window taken from the workspace just before the drop, and from one after it.
+- [ ] Moving one window of a tiled workspace to another with the keyboard, the mouse or the window menu leaves the other windows tiled where they are.
 - [ ] Windows can be moved to another workspace with the keyboard
 - [ ] Windows can be moved to another workspace with the mouse
 - [ ] Windows can be moved to workspaces between existing workspaces
