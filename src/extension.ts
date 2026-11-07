@@ -195,9 +195,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Store for stable sequences of each registered window */
     ids: Ecs.Storage<number> = this.register_storage();
 
-    /** Store for keeping track of which monitor + workspace a window is on */
-    monitors: Ecs.Storage<MonitorWorkspaceID> = this.register_storage();
-
     /** Stores movements that have been queued */
     movements: Ecs.Storage<Mtk.Rectangle> = this.register_storage();
 
@@ -272,8 +269,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                 window.meta.move_resize_frame(true, x, y, width, height);
                 window.meta.move_frame(true, x, y);
-
-                this.monitors.insert(window.entity, [window.monitor_id(), window.workspace_id()]);
 
                 if (window.activate_after_move) {
                     window.activate_after_move = false;
@@ -1042,14 +1037,11 @@ export class Ext extends Ecs.System<ExtEvent> {
         const grab_op = this.grab_op;
 
         if (this.auto_tiler && op == undefined) {
-            const mon = this.monitors.get(win.entity);
-            if (mon) {
-                const rect = win.meta.get_work_area_for_monitor(mon[0]);
-                if (rect.contains_rect(cursor_rect())) {
-                    this.auto_tiler.reflow(this, win.entity);
-                } else {
-                    this.auto_tiler.on_drop(this, win, true);
-                }
+            const rect = win.meta.get_work_area_for_monitor(this.placement(win)[0]);
+            if (rect.contains_rect(cursor_rect())) {
+                this.auto_tiler.reflow(this, win.entity);
+            } else {
+                this.auto_tiler.on_drop(this, win, true);
             }
 
             return;
@@ -1064,11 +1056,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             const crect = win.rect();
             const rect = grab_op.rect;
             if (is_move_op(op!)) {
-                const cmon = win.monitor_id();
-                const prev_mon = this.monitors.get(win.entity);
-                const mon_drop = prev_mon ? prev_mon[0] !== cmon : false;
-
-                this.monitors.insert(win.entity, [win.monitor_id(), win.workspace_id()]);
+                // A tiled window was dropped on another monitor if its tree is on a different one
+                const mon_drop = this.placement(win)[0] !== win.monitor_id();
 
                 if (rect.x != crect.x || rect.y != crect.y) {
                     if (rect.contains_rect(cursor_rect())) {
@@ -1295,8 +1284,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             const actor = win.meta.get_compositor_private<Meta.WindowActor | null>();
             if (actor) global.window_group.set_child_above_sibling(actor, null);
 
-            this.on_monitor_changed(win, (_cfrom, cto, workspace) => {
-                this.monitors.insert(win.entity, [cto, workspace]);
+            this.on_monitor_changed(win, () => {
                 this.auto_tiler?.detach_window(this, win.entity, false);
             });
         } else {
@@ -1383,15 +1371,10 @@ export class Ext extends Ecs.System<ExtEvent> {
     ) {
         const actual_monitor = win.monitor_id();
         const actual_workspace = win.workspace_id();
-        const monitor = this.monitors.get(win.entity);
+        const [expected_monitor, expected_workspace] = this.placement(win);
 
-        if (monitor) {
-            const [expected_monitor, expected_workspace] = monitor;
-            if (expected_monitor != actual_monitor || actual_workspace != expected_workspace) {
-                func(expected_monitor, actual_monitor, actual_workspace);
-            }
-        } else {
-            func(null, actual_monitor, actual_workspace);
+        if (expected_monitor != actual_monitor || actual_workspace != expected_workspace) {
+            func(expected_monitor, actual_monitor, actual_workspace);
         }
     }
 
@@ -1437,9 +1420,9 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_workspace_changed(win: Window.ShellWindow) {
         if (this.auto_tiler && !this.contains_tag(win.entity, Tags.Floating)) {
             const id = this.workspace_id(win);
-            const prev_id = this.monitors.get(win.entity);
-            if (!prev_id || id[0] != prev_id[0] || id[1] != prev_id[1]) {
-                this.monitors.insert(win.entity, id);
+            const [monitor, workspace] = this.placement(win);
+            const tiled = this.auto_tiler.attached.contains(win.entity);
+            if (!tiled || id[0] != monitor || id[1] != workspace) {
                 if (win.is_tilable()) {
                     this.auto_tiler.detach_window(this, win.entity, false);
                     this.auto_tiler.attach_to_workspace(this, win, id);
@@ -2105,14 +2088,13 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const changes = new Map<MonitorID, MonitorID>();
 
-        // Records which display's windows were moved to what new display's ID
+        // Records which display's trees had their windows moved to what new display's ID
         for (const [entity, w] of this.windows.iter()) {
-            if (!w.actor_exists()) continue;
+            if (!w.actor_exists() || !this.auto_tiler?.attached.contains(entity)) continue;
 
-            this.monitors.with(entity, ([mon]) => {
-                const assignment = mon === old_primary ? primary_display : w.monitor_id();
-                changes.set(mon, assignment);
-            });
+            const [mon] = this.placement(w);
+            const assignment = mon === old_primary ? primary_display : w.monitor_id();
+            changes.set(mon, assignment);
         }
 
         // Fetch a new list of monitors
@@ -2264,7 +2246,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const win = new Window.ShellWindow(entity, meta, window_app, this);
         this.windows.insert(entity, win);
-        this.monitors.insert(entity, [win.monitor_id(), win.workspace_id()]);
 
         const grab_focus = () => {
             this.when_movements_empty(() => {
@@ -2289,12 +2270,10 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Returns the tilable window(s) that the mouse pointer is currently hovering above. */
     *windows_at_pointer(cursor: Mtk.Rectangle, monitor: MonitorID, workspace: WorkspaceID) {
-        for (const entity of this.monitors.find(m => m[0] == monitor && m[1] == workspace)) {
-            const window = this.windows.with(entity, window => {
-                return window.is_tilable() && window.rect().contains_rect(cursor) ? window : null;
-            });
-
-            if (window) yield window;
+        for (const window of this.windows.values()) {
+            if (!window.actor_exists() || window.monitor_id() != monitor || window.workspace_id() != workspace)
+                continue;
+            if (window.is_tilable() && window.rect().contains_rect(cursor)) yield window;
         }
     }
 
@@ -2307,6 +2286,18 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Fetch a workspace by its index */
     workspace_by_id(id: WorkspaceID): Meta.Workspace | null {
         return wom.get_workspace_by_index(id);
+    }
+
+    /**
+     * Where the window belongs. For a tiled window, that's its tree's monitor and workspace, which are
+     * our own record and only change when we move the tree. For any other window, it's where mutter has
+     * it now. There's no copy of where a window was last seen, which would go stale whenever mutter
+     * renumbers workspaces or monitors.
+     */
+    placement(win: Window.ShellWindow): MonitorWorkspaceID {
+        const entity = this.auto_tiler?.attached.get(win.entity);
+        const fork = entity ? this.auto_tiler?.forest.forks.get(entity) : null;
+        return fork ? [fork.monitor, fork.workspace] : this.workspace_id(win);
     }
 
     workspace_id(window: Window.ShellWindow | null = null): MonitorWorkspaceID {

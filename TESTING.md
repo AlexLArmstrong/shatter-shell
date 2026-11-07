@@ -80,6 +80,8 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 
 - [ ] Windows move across displays in adjustment mode with direction keys
 - [ ] Windows move across displays with the mouse
+- [ ] A tiled window that is maximized and then moved to another display leaves its tiling there, and a floating window dropped on another display stays floating.
+- [ ] Dragging a window onto another tiled window, after removing or reordering workspaces, still tiles it with the window under the pointer.
 - [ ] Changing the primary display moves the top bar. Window heights adjust on all monitors for the new position.
 - [ ] Unplug a display - windows from the display retile on a new workspace on the remaining display
 - [ ] Plug an additional display into a laptop - windows and workspaces don't changes

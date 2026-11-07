@@ -159,25 +159,20 @@ export class AutoTiler {
 
         if (attached) {
             const [, fork] = attached;
-            const monitor = ext.monitors.get(attachee.entity);
-            if (monitor) {
-                if (fork.is_toplevel && fork.smart_gapped && fork.right) {
-                    fork.smart_gapped = false;
-                    const rect = ext.monitor_work_area(fork.monitor);
+            if (fork.is_toplevel && fork.smart_gapped && fork.right) {
+                fork.smart_gapped = false;
+                const rect = ext.monitor_work_area(fork.monitor);
 
-                    rect.x += ext.gap_outer;
-                    rect.y += ext.gap_outer;
-                    rect.width -= ext.gap_outer * 2;
-                    rect.height -= ext.gap_outer * 2;
+                rect.x += ext.gap_outer;
+                rect.y += ext.gap_outer;
+                rect.width -= ext.gap_outer * 2;
+                rect.height -= ext.gap_outer * 2;
 
-                    fork.set_area(rect);
-                }
-
-                this.tile(ext, fork, fork.area.copy());
-                return true;
-            } else {
-                Log.error(`missing monitor association for Window(${attachee.entity})`);
+                fork.set_area(rect);
             }
+
+            this.tile(ext, fork, fork.area.copy());
+            return true;
         }
 
         return false;
