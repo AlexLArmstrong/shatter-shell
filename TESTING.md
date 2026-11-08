@@ -34,6 +34,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Unmaximizing with mouse re-tiles into place
 - [ ] Full-screening removes the active hint and full-screens on one display
 - [ ] Unfull-screening adds the active hint and re-tiles into place
+- [ ] The active hint is drawn right above the focused window, at once: a dialog of the window or an always-on-top window covers it, and it's in place straight after raising the window or moving it to another workspace.
 - [ ] Maximizing a YouTube video fills the screen and unmaximizing retiles the browser in place
 - [ ] VIM shortcuts work as direction keys
 - [ ] `Super` `O` changes window orientation

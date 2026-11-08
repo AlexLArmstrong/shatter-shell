@@ -1741,6 +1741,14 @@ export class Ext extends Ecs.System<ExtEvent> {
             }),
         );
 
+        // Mutter reorders the window actors whenever it restacks, which can leave the border of the
+        // focused window anywhere among them
+        this.connect_object(display, () =>
+            display.connect('restacked', () => {
+                this.get_focused_window()?.restack();
+            }),
+        );
+
         this.connect_object(display, () =>
             display.connect('grab-op-begin', (_display, win, op) => {
                 this.on_grab_start(win, op);

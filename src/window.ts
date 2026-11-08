@@ -27,23 +27,8 @@ const FADE_DURATION = 150;
 
 export const window_tracker = Shell.WindowTracker.get_default();
 
-/** Contains SourceID of a restack operation. Used to prevent multiple restacks. */
-let SCHEDULED_RESTACK: number | null = null;
-
 /** Contains SourceID of an active hint operation. */
 let ACTIVE_HINT_SHOW_ID: number | null = null;
-
-enum RESTACK_STATE {
-    RAISED,
-    WORKSPACE_CHANGED,
-    NORMAL,
-}
-
-enum RESTACK_SPEED {
-    RAISED = 430,
-    WORKSPACE_CHANGED = 300,
-    NORMAL = 200,
-}
 
 export class ShellWindow {
     entity: Entity;
@@ -612,94 +597,21 @@ export class ShellWindow {
     }
 
     /**
-     * Sort the window group/always top group with each window border
-     * @param updateState NORMAL, RAISED, WORKSPACE_CHANGED
+     * Places the border directly above the window, so that whatever mutter stacks above the window,
+     * such as its dialogs or an always-on-top window, covers its border too. Mutter reorders the window
+     * actors whenever it restacks, so Ext calls this on every restack for the focused window.
      */
-    restack(updateState: RESTACK_STATE = RESTACK_STATE.NORMAL) {
+    restack() {
         this.update_border_layout();
         if (this.meta.is_fullscreen() || (this.is_single_max_screen() && !this.is_snap_edge()) || this.meta.minimized) {
             this.hide_border();
         }
 
-        let restackSpeed = RESTACK_SPEED.NORMAL;
-
-        switch (updateState) {
-            case RESTACK_STATE.NORMAL:
-                restackSpeed = RESTACK_SPEED.NORMAL;
-                break;
-            case RESTACK_STATE.RAISED:
-                restackSpeed = RESTACK_SPEED.RAISED;
-                break;
-            case RESTACK_STATE.WORKSPACE_CHANGED:
-                restackSpeed = RESTACK_SPEED.WORKSPACE_CHANGED;
-                break;
+        const border = this.border;
+        const actor = this.meta.get_compositor_private<Meta.WindowActor | null>();
+        if (border && actor && border.get_parent() === actor.get_parent()) {
+            global.window_group.set_child_above_sibling(border, actor);
         }
-
-        let restacks = 0;
-
-        const action = () => {
-            const count = restacks;
-            restacks += 1;
-
-            if (!this.actor_exists() && count === 0) return true;
-
-            if (count === 3) {
-                if (SCHEDULED_RESTACK !== null) GLib.source_remove(SCHEDULED_RESTACK);
-                SCHEDULED_RESTACK = null;
-            }
-
-            const border = this.border;
-            const actor = this.meta.get_compositor_private<Meta.WindowActor | null>();
-            const win_group = global.window_group;
-
-            if (actor && border) {
-                this.update_border_layout();
-                // move the border above the window group first
-                win_group.set_child_above_sibling(border, null);
-
-                if (this.always_top_windows.length > 0) {
-                    // honor the always-top windows
-                    for (const above_actor of this.always_top_windows) {
-                        if (actor != above_actor) {
-                            if (border.get_parent() === above_actor.get_parent()) {
-                                win_group.set_child_below_sibling(border, above_actor);
-                            }
-                        }
-                    }
-
-                    // Move the border above the current window actor
-                    if (border.get_parent() === actor.get_parent()) {
-                        win_group.set_child_above_sibling(border, actor);
-                    }
-                }
-
-                // Honor transient windows
-                for (const window of this.ext.windows.values()) {
-                    const parent = window.meta.get_transient_for();
-                    const window_actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
-                    if (!parent || !window_actor) continue;
-                    const parent_actor = parent.get_compositor_private<Meta.WindowActor | null>();
-                    if (!parent_actor && parent_actor !== actor) continue;
-                    win_group.set_child_below_sibling(border, window_actor);
-                }
-            }
-
-            return true;
-        };
-
-        if (SCHEDULED_RESTACK !== null) GLib.source_remove(SCHEDULED_RESTACK);
-        SCHEDULED_RESTACK = GLib.timeout_add(GLib.PRIORITY_LOW, restackSpeed, action);
-    }
-
-    get always_top_windows(): Meta.WindowActor[] {
-        const above_windows: Meta.WindowActor[] = [];
-
-        for (const actor of global.get_window_actors()) {
-            const window = actor.get_meta_window();
-            if (window && window.is_above()) above_windows.push(actor);
-        }
-
-        return above_windows;
     }
 
     hide_border() {
@@ -791,12 +703,12 @@ export class ShellWindow {
     }
 
     private window_raised() {
-        this.restack(RESTACK_STATE.RAISED);
+        this.restack();
         this.ext.show_border_on_focused();
     }
 
     private workspace_changed() {
-        this.restack(RESTACK_STATE.WORKSPACE_CHANGED);
+        this.restack();
     }
 }
 
