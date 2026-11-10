@@ -49,16 +49,18 @@ Splitting the file into `fn(ext: Ext, …)` modules is rejected: it keeps the gl
 
 The `Overlay`, `TileQuery` and `TreeMigrator` ports are implemented by the existing `St.BoxLayout` overlay and by `AutoTiler`/`Fork` respectively. They are shaped from the calls those components actually make.
 
-4. **Tests:** `node:test` + `node:assert` (Node 24 is installed, so no new dependencies), in `src/core/*.test.ts`. `tsc` compiles them into `target/`, `make test` runs `node --test target/core/`, and `transpile.sh` drops `*.test.js` from `_build`. CI runs `make test`. An oxlint `no-restricted-imports` override bans runtime `gi://`/`resource://` imports in `src/core/**`.
+4. **Tests:** `node:test` + `node:assert`, in `tests/*.test.ts`. `tests/tsconfig.json` (extends the root one, `types: ["node"]`, output in `target-test/`) keeps Node's types out of the extension's build and the compiled tests out of `_build`. The only new dependency is `@types/node`. `make test` compiles and runs them, and so does CI. In `src/core/**`, an oxlint `no-restricted-imports` override bans runtime imports of `gi://*`, `resource://*` and `../*`, but allows type-only ones. *(Done in the `focus-history` PR.)*
 5. **Other modules depend on ports, not `Ext`.** This comes later, gradually. Until then `Ext` keeps one-line forwarding getters (`get gap_inner() { return this.gaps.inner }`), so `tiling.ts`, `auto_tiler.ts` and the rest don't change in the same commits.
 
-**Performance (10k-window rule):** every operation keeps its big-O. `FocusHistory` is O(1). Migration planning stays O(toplevels × changed monitors). No lookup becomes a scan. Components are built once, so nothing is allocated on hot paths.
+**Performance (10k-window rule):** every operation keeps its big-O. `FocusHistory` is O(1), except for `forget`, which is O(workspaces) per destroyed window because it also clears the per-workspace entries. Migration planning stays O(toplevels × changed monitors). No lookup becomes a scan. Components are built once, so nothing is allocated on hot paths.
 
 ## Phases (`ref:` commits; each one builds and passes `make test`)
 
-**Phase 0: groundwork.** Test harness, CI, lint override. Move `workspace_events.ts` → `core/` and give it its first tests. Delete dead code: `actor_of`, `monitor_area`, `find_monitor_to_retach`, `size_changed_block/unblock` (plus the `size_changed_signal` field), `is_floating`, `update_display_configuration_before`. Rename `displays`/`Display` → `monitors`/`MonitorInfo`.
+**Upstream first step (branch `focus-history`, based on `origin/master_resolute`):** the test harness, CI, the `src/core/` lint override, and `core/focus_history.ts` `FocusHistory` with tests. It also fixes destroyed windows staying recorded as a workspace's last focused one. The phases below assume it has been merged and `dev-refactored` rebased onto it.
 
-**Phase 1: leaf components with no ports, or only trivial ones.** `Scheduler` (+ `GLibScheduler`), `FocusHistory`, `Gaps`, `Theme` (+ `StStylesheetLoader`), `settings_actions`. Each comes with tests written against today's behaviour before `Ext` switches over to it.
+**Phase 0: groundwork.** Move `workspace_events.ts` → `core/` and give it its first tests. Delete dead code: `actor_of`, `monitor_area`, `find_monitor_to_retach`, `size_changed_block/unblock` (plus the `size_changed_signal` field), `is_floating`, `update_display_configuration_before`. Rename `displays`/`Display` → `monitors`/`MonitorInfo`.
+
+**Phase 1: leaf components with no ports, or only trivial ones.** `Scheduler` (+ `GLibScheduler`), `Gaps`, `Theme` (+ `StStylesheetLoader`), `settings_actions`. Each comes with tests written against today's behaviour before `Ext` switches over to it.
 
 **Phase 2: the bigger components.** `Signals`, `Monitors` (+ `MutterMonitorSource`), `Grab`, `Workspaces`, `FloatingExceptions` (+ `ShellWindowPicker`). `signals_attach` becomes each component's `attach(signals)` plus the root's wiring. The module-global `indicator` becomes a constructor argument. After this, `extension.ts` is ~600 lines.
 
