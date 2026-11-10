@@ -278,7 +278,7 @@ export class System<T> extends World {
 
     /** Registers an event to be executed in the event loop */
     register(event: T): void {
-        this.#executor.wake(this, event);
+        this.#executor.wake(event => this.run(event), event);
     }
 
     /** Executs an event on the system */

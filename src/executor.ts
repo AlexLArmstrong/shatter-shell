@@ -1,9 +1,8 @@
 import GLib from 'gi://GLib';
 
-import * as Ecs from './ecs.js';
-
 export interface Executor<T> {
-    wake(system: Ecs.System<T>, event: T): void;
+    /** Queues `event`, to be handed to `run` from the event loop */
+    wake(run: (event: T) => void, event: T): void;
 }
 
 /** Glib-based event executor */
@@ -17,14 +16,14 @@ export class GLibExecutor<T> implements Executor<T> {
      * - The signal will continue executing for as long as there are events remaining in the queue.
      * - Events are handled within batches, yielding between each new set of events.
      */
-    wake(system: Ecs.System<T>, event: T): void {
+    wake(run: (event: T) => void, event: T): void {
         this.#events.unshift(event);
 
         if (this.#event_loop) return;
 
         this.#event_loop = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
             const event = this.#events.pop();
-            if (event !== undefined) system.run(event);
+            if (event !== undefined) run(event);
 
             if (this.#events.length === 0) {
                 this.#event_loop = 0;
