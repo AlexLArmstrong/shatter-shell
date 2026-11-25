@@ -232,6 +232,73 @@ describe('Forest', () => {
         assert.equal(forest.requested.get(1)?.rect.width, 608);
     });
 
+    describe('tabs', () => {
+        const layout = (forest: Forest<FakeTabBar>) => forest.layout(source(20));
+
+        test('toggling a lone window gives its leaf tabs and a tab bar', () => {
+            const { forest, top } = forest_with_one();
+            forest.attach_window(1, 2, AUTO, false);
+            const bars: Array<FakeTabBar> = [];
+
+            forest.unstack(layout(forest), top, 1, true, () => {
+                const bar = new FakeTabBar();
+                bars.push(bar);
+                return bar;
+            });
+
+            const leaf = top.left.inner;
+            assert.ok(leaf.kind === NodeKind.STACK);
+            assert.equal(leaf.tabbed, true);
+            assert.equal(forest.view_of(leaf), bars[0]);
+            assert.equal(forest.requested.get(1)?.rect.y, 20);
+        });
+
+        test('toggling a stack of only that window takes its tabs and tab bar', () => {
+            const { forest, top } = forest_with_one();
+            forest.attach_window(1, 2, AUTO, false);
+            const bar = new FakeTabBar();
+            forest.unstack(layout(forest), top, 1, true, () => bar);
+
+            forest.unstack(layout(forest), top, 1, true, () => new FakeTabBar());
+
+            const leaf = top.left.inner;
+            assert.ok(leaf.kind === NodeKind.STACK);
+            assert.equal(leaf.tabbed, false);
+            assert.equal(bar.destroyed, true);
+        });
+
+        test('a stack of several windows keeps its tabs', () => {
+            const { forest, top } = forest_with_one();
+            forest.attach_window(1, 2, AUTO, false);
+            forest.create_stack(layout(forest), 1, () => new FakeTabBar());
+            forest.attach_window(1, 3, AUTO, true);
+
+            forest.unstack(layout(forest), top, 1, true, () => new FakeTabBar());
+
+            const leaf = top.left.inner;
+            assert.ok(leaf.kind === NodeKind.STACK);
+            assert.equal(leaf.tabbed, true);
+            assert.deepEqual(leaf.windows, [1, 3]);
+        });
+
+        test('create_stack gives a window that is not stacked tabs, and leaves others alone', () => {
+            const { forest, top } = forest_with_one();
+            forest.attach_window(1, 2, AUTO, false);
+            let made = 0;
+            const make = () => {
+                made += 1;
+                return new FakeTabBar();
+            };
+
+            forest.create_stack(layout(forest), 2, make);
+            forest.create_stack(layout(forest), 2, make);
+            forest.create_stack(layout(forest), 9, make);
+
+            assert.equal(made, 1);
+            assert.equal(top.right?.inner.kind === NodeKind.STACK && top.right.inner.tabbed, true);
+        });
+    });
+
     describe('the links back up the trees', () => {
         /** Finds the fork that holds a window's leaf by walking every fork */
         const scan_fork_of = (forest: Forest, window: number) =>
@@ -284,15 +351,10 @@ describe('Forest', () => {
                         case 2:
                             if (fork && w !== undefined) forest.detach(fork, w);
                             break;
-                        case 3: {
-                            // Gives a lone window's leaf tabs, as toggling stacking does
-                            const side = fork && w !== undefined ? fork.find_branch(w) : null;
-                            if (!side?.is_leaf() || side.inner.tabbed) break;
-                            side.inner.tabbed = true;
-                            side.inner.idx = forest.stacks.insert(new FakeTabBar());
-                            fork!.measure(layout, fork!.area);
+                        case 3:
+                            // Gives a leaf tabs or takes them away, as toggling stacking does
+                            if (fork && w !== undefined) forest.unstack(layout, fork, w, true, () => new FakeTabBar());
                             break;
-                        }
                         case 4: {
                             // Takes a window out of its stack before detaching it, as the keyboard does
                             const side = fork && w !== undefined ? fork.find_branch(w) : null;

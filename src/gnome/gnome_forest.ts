@@ -507,55 +507,24 @@ export class GnomeForest {
     }
 
     unstack(fork: Fork, win: MutterWindowHandle, toggled: boolean = false) {
-        if (toggled && fork.left.is_window(win.id)) {
-            this.add_tabs(fork, fork.left);
-            this.ext.gnome_layout.measure(this.forest, fork, fork.area);
-        } else if (fork.left.is_in_stack(win.id)) {
-            // Only a stack of one window loses its tabs
-            if (fork.left.inner.windows.length === 1) {
-                this.remove_tabs(fork.left);
-                this.ext.gnome_layout.measure(this.forest, fork, fork.area);
-                if (!fork.right) this.forest.reassign_to_parent(fork, fork.left);
-            }
-        } else if (toggled && fork.right && fork.right.is_window(win.id)) {
-            this.add_tabs(fork, fork.right);
-            this.ext.gnome_layout.measure(this.forest, fork, fork.area);
-        } else if (fork.right && fork.right.is_in_stack(win.id)) {
-            if (fork.right.inner.windows.length === 1) {
-                this.remove_tabs(fork.right);
-                this.ext.gnome_layout.measure(this.forest, fork, fork.area);
-            }
-        }
+        this.forest.unstack(
+            this.ext.gnome_layout.layout(this.forest),
+            fork,
+            win.id,
+            toggled,
+            leaf => new Stack(this.ext, leaf),
+        );
 
         this.tile(fork, fork.area);
     }
 
-    /** Gives a leaf tabs, along with the Stack that draws them, so that it can hold more windows */
-    private add_tabs(fork: Fork, leaf: node.Node<node.NodeStack>) {
-        if (leaf.inner.tabbed) return;
-
-        leaf.inner.tabbed = true;
-        leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner));
-    }
-
-    /** Takes the tabs from a leaf of one window, which releases the window */
-    private remove_tabs(leaf: node.Node<node.NodeStack>) {
-        if (leaf.inner.idx !== null) this.forest.stacks.remove(leaf.inner.idx)?.destroy();
-
-        leaf.inner.tabbed = false;
-        leaf.inner.idx = null;
-    }
-
     /** Gives the leaf of a window tabs, if it has none yet */
     create_stack(window: MutterWindowHandle) {
-        const fork = this.attached.get(window.id);
-        if (!fork) return;
-
-        const leaf = fork.left.is_window(window.id) ? fork.left : fork.right?.is_window(window.id) ? fork.right : null;
-        if (!leaf) return;
-
-        this.add_tabs(fork, leaf);
-        this.ext.gnome_layout.measure(this.forest, fork, fork.area);
+        this.forest.create_stack(
+            this.ext.gnome_layout.layout(this.forest),
+            window.id,
+            leaf => new Stack(this.ext, leaf),
+        );
     }
 
     /** Draws a stack again from the tree, and places its tab bar if it has been measured */

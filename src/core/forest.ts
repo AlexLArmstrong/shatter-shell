@@ -323,6 +323,67 @@ export class Forest<B extends TabBar = TabBar> implements Fork.TreeLinks {
         if (fork.is_root) this.trees_.delete(fork.tree);
     }
 
+    /** Gives a leaf tabs, along with the tab bar that draws them, so that it can hold more windows */
+    add_tabs(leaf: Node.NodeStack, make_bar: (leaf: Node.NodeStack) => B) {
+        if (leaf.tabbed) return;
+
+        leaf.tabbed = true;
+        leaf.idx = this.stacks.insert(make_bar(leaf));
+    }
+
+    /** Takes the tabs from a leaf of one window, which releases the window */
+    remove_tabs(leaf: Node.NodeStack) {
+        if (leaf.idx !== null) this.stacks.remove(leaf.idx)?.destroy();
+
+        leaf.tabbed = false;
+        leaf.idx = null;
+    }
+
+    /**
+     * Toggles the tabs of the leaf of `fork` that holds `window`. A leaf of one window without tabs
+     * gets them when `toggled`. A stack of only this window loses them, and a root fork that is left
+     * with its one leaf gives it to its parent.
+     */
+    unstack(
+        layout: Node.Layout,
+        fork: Fork.Fork,
+        window: WindowId,
+        toggled: boolean,
+        make_bar: (leaf: Node.NodeStack) => B,
+    ) {
+        if (toggled && fork.left.is_window(window)) {
+            this.add_tabs(fork.left.inner, make_bar);
+            fork.measure(layout, fork.area);
+        } else if (fork.left.is_in_stack(window)) {
+            // Only a stack of one window loses its tabs
+            if (fork.left.inner.windows.length === 1) {
+                this.remove_tabs(fork.left.inner);
+                fork.measure(layout, fork.area);
+                if (!fork.right) this.reassign_to_parent(fork, fork.left);
+            }
+        } else if (toggled && fork.right && fork.right.is_window(window)) {
+            this.add_tabs(fork.right.inner, make_bar);
+            fork.measure(layout, fork.area);
+        } else if (fork.right && fork.right.is_in_stack(window)) {
+            if (fork.right.inner.windows.length === 1) {
+                this.remove_tabs(fork.right.inner);
+                fork.measure(layout, fork.area);
+            }
+        }
+    }
+
+    /** Gives the leaf of a window tabs, if it has none yet */
+    create_stack(layout: Node.Layout, window: WindowId, make_bar: (leaf: Node.NodeStack) => B) {
+        const fork = this.fork_of(window);
+        if (!fork) return;
+
+        const leaf = fork.left.is_window(window) ? fork.left : fork.right?.is_window(window) ? fork.right : null;
+        if (!leaf) return;
+
+        this.add_tabs(leaf.inner, make_bar);
+        fork.measure(layout, fork.area);
+    }
+
     /** Detaches a window from its fork, re-arranging the fork's tree as necessary */
     detach(fork: Fork.Fork, window: WindowId): Fork.Fork | null {
         if (fork.detached) return null;
