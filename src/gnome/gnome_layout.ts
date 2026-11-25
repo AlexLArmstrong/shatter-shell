@@ -1,10 +1,10 @@
 import Meta from 'gi://Meta';
 
+import type { Forest } from '../core/forest.js';
 import type { Fork } from '../core/fork.js';
 import type { Movement } from '../core/movement.js';
 import type { Layout } from '../core/node.js';
 import type { Ext } from '../extension.js';
-import type { Forest } from '../forest.js';
 import type { MutterWindowHandle } from './mutter_window_handle.js';
 
 import { copy_rect, type Rect } from '../core/geom.js';

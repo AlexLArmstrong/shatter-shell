@@ -4,7 +4,7 @@ import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import type * as Settings from './settings.js';
 
-import * as a from './arena.js';
+import * as a from './core/arena.js';
 import * as Node from './core/node.js';
 
 const Arena = a.Arena;

@@ -1,13 +1,12 @@
-import type { LayoutSizes } from './core/layout_sizes.js';
+import type { LayoutSizes } from './layout_sizes.js';
 
 import * as arena from './arena.js';
-import * as Fork from './core/fork.js';
-import * as geom from './core/geom.js';
-import { whole_rect, type Rect } from './core/geom.js';
-import * as movement from './core/movement.js';
-import * as Node from './core/node.js';
-import { Orientation } from './core/orientation.js';
-import { Stack } from './stack.js';
+import * as Fork from './fork.js';
+import * as geom from './geom.js';
+import { whole_rect, type Rect } from './geom.js';
+import * as movement from './movement.js';
+import * as Node from './node.js';
+import { Orientation } from './orientation.js';
 
 const { Arena } = arena;
 const { Movement } = movement;
@@ -46,6 +45,13 @@ interface Request {
  * forks will be dynamically removed and created to accomodate the new
  * arrangement.
  */
+/** The widget that draws the tab bar of a tabbed leaf */
+export interface TabBar {
+    /** Shows the tab of this window as the active one */
+    activate(window: WindowId): void;
+    destroy(): void;
+}
+
 /** What the forest needs to know about the windows that it tiles */
 export interface WindowStates {
     /** Whether the window is managed */
@@ -57,7 +63,7 @@ export interface WindowStates {
 /** What laying out a tree needs from outside of the forest */
 export type LayoutSource = Omit<Node.Layout, 'place' | 'restack'>;
 
-export class Forest implements Fork.TreeLinks {
+export class Forest<B extends TabBar = TabBar> implements Fork.TreeLinks {
     constructor(
         private readonly workspaces: Fork.WorkspaceList,
         private readonly tabs: Node.TabBars,
@@ -77,7 +83,7 @@ export class Forest implements Fork.TreeLinks {
     forks: Set<Fork.Fork> = new Set();
 
     /** The tab bars of the leaves that have tabs, by NodeStack.idx */
-    stacks: arena.Arena<Stack> = new Arena();
+    stacks: arena.Arena<B> = new Arena();
 
     /** The leaf that holds each tiled window */
     readonly leaves = new Map<WindowId, Node.NodeLeaf>();
@@ -102,8 +108,8 @@ export class Forest implements Fork.TreeLinks {
         }
     }
 
-    /** The Stack that draws a leaf, which only one with tabs has */
-    view_of(leaf: Node.NodeStack): Stack | null {
+    /** The tab bar that draws a leaf, which only one with tabs has */
+    view_of(leaf: Node.NodeStack): B | null {
         return leaf.idx === null ? null : this.stacks.get(leaf.idx);
     }
 

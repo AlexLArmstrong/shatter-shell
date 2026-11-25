@@ -2,8 +2,9 @@ import type Meta from 'gi://Meta';
 
 import type { Ext } from '../extension.js';
 import type { ExtensionSettings } from '../settings.js';
+import type { Stack } from '../stack.js';
 
-import { Forest } from '../forest.js';
+import { Forest } from '../core/forest.js';
 import { Log } from '../log.js';
 import { GnomeForest } from './gnome_forest.js';
 import { MutterWorkspaces } from './mutter_workspaces.js';
@@ -20,7 +21,7 @@ export class GnomeAutoTiling {
         const { ext } = this;
         return new GnomeForest(
             ext,
-            new Forest(
+            new Forest<Stack>(
                 new MutterWorkspaces(),
                 ext.tab_bars,
                 ext.sizes,

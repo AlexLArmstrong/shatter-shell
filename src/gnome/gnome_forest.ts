@@ -1,8 +1,8 @@
 import Mtk from 'gi://Mtk';
 
+import type { Forest, MoveBy, MoveByCursor } from '../core/forest.js';
 import type { Fork } from '../core/fork.js';
 import type { Ext } from '../extension.js';
-import type { Forest, MoveBy, MoveByCursor } from '../forest.js';
 import type { MutterWindowHandle } from './mutter_window_handle.js';
 
 import { copy_rect, type Rect } from '../core/geom.js';
@@ -19,7 +19,7 @@ import { Log } from '../log.js';
 
 /** Which fork holds each tiled window */
 export class Attachments {
-    constructor(private readonly forest: Forest) {}
+    constructor(private readonly forest: Forest<Stack>) {}
 
     /** The fork that holds the window's leaf, if it's tiled */
     get(window: WindowId): Fork | null {
@@ -39,12 +39,12 @@ export class Attachments {
 
 /** The GNOME side of the Forest: tiles windows into its trees and lays them out, while auto-tiling is on */
 export class GnomeForest {
-    forest: Forest;
+    forest: Forest<Stack>;
     readonly attached: Attachments;
 
     constructor(
         private readonly ext: Ext,
-        forest: Forest,
+        forest: Forest<Stack>,
     ) {
         this.forest = forest;
         this.attached = new Attachments(forest);
