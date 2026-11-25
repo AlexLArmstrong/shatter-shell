@@ -1,5 +1,4 @@
 import { Executor } from './executor.js';
-import { Tags } from './tags.js';
 
 /**
  * A generational entity ID.
@@ -158,8 +157,6 @@ export class World {
     private entities_: Array<Entity> = [];
     /** An array of registered storages */
     private storages: Array<Storage<unknown>> = [];
-    /** An array for storing tags associated with an entity */
-    private tags_: Array<Set<Tags>> = [];
     /** An array of free slots to allocate */
     private free_slots: Array<number> = [];
 
@@ -179,15 +176,6 @@ export class World {
     }
 
     /**
-     * Fetches tags associated with an entity.
-     *
-     * Tags are essentially a dense set of small components.
-     */
-    tags(entity: Entity): Set<Tags> {
-        return this.tags_[entity[0]]!;
-    }
-
-    /**
      * Create a new entity in the world.
      *
      * Find the first available slot, and increment the generation.
@@ -202,7 +190,6 @@ export class World {
         } else {
             entity = entity_new(this.capacity, 0);
             this.entities_.push(entity);
-            this.tags_.push(new Set());
         }
 
         return entity;
@@ -214,27 +201,11 @@ export class World {
      * Sets the `id` of the entity to `null`, thus marking its slot as unused.
      */
     delete_entity(entity: Entity) {
-        this.tags(entity).clear();
         for (const storage of this.storages) {
             storage.remove(entity);
         }
 
         this.free_slots.push(entity[0]);
-    }
-
-    /** Adds a new tag to the given entity */
-    add_tag(entity: Entity, tag: Tags) {
-        this.tags(entity).add(tag);
-    }
-
-    /** Returns `true` if this tag exists for the given entity */
-    contains_tag(entity: Entity, tag: Tags): boolean {
-        return this.tags(entity).has(tag);
-    }
-
-    /** Deletes a tag from the given entity */
-    delete_tag(entity: Entity, tag: Tags) {
-        this.tags(entity).delete(tag);
     }
 
     /**

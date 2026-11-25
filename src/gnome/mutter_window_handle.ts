@@ -5,7 +5,6 @@ import type { Ext } from '../extension.js';
 import * as Events from '../events.js';
 import * as focus from '../focus.js';
 import * as lib from '../lib.js';
-import { Tags } from '../tags.js';
 import * as utils from '../utils.js';
 const { monitorID, workspaceID } = lib;
 
@@ -51,6 +50,15 @@ export class MutterWindowHandle implements WindowHandle {
     grab: boolean = false;
     activate_after_move: boolean = false;
     ignore_detach: boolean = false;
+
+    /** Set when the user made this window float, though it would be tiled */
+    floating: boolean = false;
+
+    /** Set when the user made this window tile, though it would float */
+    force_tile: boolean = false;
+
+    /** Set while changes to this window's size are ignored, such as while it's being moved */
+    blocked: boolean = false;
     was_attached_to?: [Entity, boolean | number];
     destroying: boolean = false;
 
@@ -251,8 +259,8 @@ export class MutterWindowHandle implements WindowHandle {
      * not included here.
      */
     is_tilable(): boolean {
-        if (this.ext.contains_tag(this.entity, Tags.ForceTile)) return true;
-        if (this.ext.contains_tag(this.entity, Tags.Floating)) return false;
+        if (this.force_tile) return true;
+        if (this.floating) return false;
 
         // Quake-style terminals such as Tilix's quake mode.
         if (this.meta.get_role() === 'quake') return false;

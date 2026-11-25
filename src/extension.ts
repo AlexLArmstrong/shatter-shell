@@ -61,7 +61,6 @@ import { GnomeExceptions } from './gnome/gnome_exceptions.js';
 import { GnomeTheme } from './gnome/gnome_theme.js';
 import { Log } from './log.js';
 import { get_current_path } from './paths.js';
-import { Tags } from './tags.js';
 import { WindowAnimationController } from './window_animation_controller.js';
 const { monitorID, workspaceID } = Lib;
 
@@ -338,7 +337,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     /**
-     * Connects an event that only calls `func` if the window does not have {@link Tags.Blocked}.
+     * Connects an event that only calls `func` if the window isn't {@link MutterWindowHandle.blocked}.
      *
      * See also {@link size_signals_block} and {@link size_signals_unblock}.
      */
@@ -348,7 +347,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         func: () => void,
     ): number {
         return this.connect_meta(win, signal, () => {
-            if (!this.contains_tag(win.entity, Tags.Blocked)) func();
+            if (!win.blocked) func();
         });
     }
 
@@ -755,7 +754,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                 if (
                     is_same_space
-                    && !this.contains_tag(compare.entity, Tags.Floating)
+                    && !compare.floating
                     && compare.is_maximized()
                     && win.entity[0] !== compare.entity[0]
                 ) {
@@ -817,7 +816,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                 win.was_attached_to = [attached, attachment];
                 this.gnome_forest.detach_window(win.entity);
-            } else if (!this.contains_tag(win.entity, Tags.Floating)) {
+            } else if (!win.floating) {
                 if (win.was_attached_to) {
                     const [entity, attachment] = win.was_attached_to;
                     delete win.was_attached_to;
@@ -916,7 +915,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Called when a window changes workspace/monitor */
     on_workspace_changed(win: Window.MutterWindowHandle) {
-        if (this.gnome_forest && !this.contains_tag(win.entity, Tags.Floating)) {
+        if (this.gnome_forest && !win.floating) {
             const id = this.workspace_id(win);
             const [monitor, workspace] = this.placement(win);
             const tiled = this.gnome_forest.attached.contains(win.entity);
@@ -1238,11 +1237,11 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     size_signals_block(win: Window.MutterWindowHandle) {
-        this.add_tag(win.entity, Tags.Blocked);
+        win.blocked = true;
     }
 
     size_signals_unblock(win: Window.MutterWindowHandle) {
-        this.delete_tag(win.entity, Tags.Blocked);
+        win.blocked = false;
     }
 
     // Snaps all windows to the window grid

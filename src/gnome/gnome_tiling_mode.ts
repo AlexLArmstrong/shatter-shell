@@ -16,7 +16,6 @@ import { Fork } from '../fork.js';
 import * as Lib from '../lib.js';
 import { Log } from '../log.js';
 import * as Node from '../node.js';
-import { Tags } from '../tags.js';
 import * as window from './mutter_window_handle.js';
 const { monitorID } = Lib;
 const { MutterWindowHandle } = window;
@@ -667,7 +666,7 @@ export class GnomeTilingMode {
         if (!this.window) return;
         this.resizing_window = true;
 
-        if (this.ext.gnome_forest && !this.ext.contains_tag(this.window, Tags.Floating)) {
+        if (this.ext.gnome_forest && !this.ext.windows.get(this.window)?.floating) {
             this.resize_auto(direction);
         } else {
             let array: [number, number, number, number];
@@ -759,7 +758,7 @@ export class GnomeTilingMode {
             this.ext.set_overlay(win.frame());
             this.ext.overlay.visible = true;
 
-            if (!this.ext.gnome_forest || this.ext.contains_tag(win.entity, Tags.Floating)) {
+            if (!this.ext.gnome_forest || win.floating) {
                 // Make sure overlay is valid
                 this.rect_by_active_area((_monitor, rect) => {
                     this.change(this.ext.overlay, rect, 0, 0, 0, 0);

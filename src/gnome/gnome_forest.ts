@@ -17,7 +17,6 @@ import * as tiling from './gnome_tiling_mode.js';
 
 const { NodeKind } = node;
 import { Log } from '../log.js';
-import { Tags } from '../tags.js';
 
 /** Which fork holds each tiled window */
 export class Attachments {
@@ -512,15 +511,15 @@ export class GnomeForest {
         if (!focused) return;
 
         if (focused.was_tilable) {
-            this.ext.delete_tag(focused.entity, Tags.ForceTile);
+            focused.force_tile = false;
             const fork_entity = this.attached.get(focused.entity);
             if (fork_entity) {
                 this.detach_window(focused.entity);
             }
-            this.ext.add_tag(focused.entity, Tags.Floating);
+            focused.floating = true;
         } else {
-            this.ext.delete_tag(focused.entity, Tags.Floating);
-            this.ext.add_tag(focused.entity, Tags.ForceTile);
+            focused.floating = false;
+            focused.force_tile = true;
             this.auto_tile(focused, false);
         }
         focused.reconsider_tiling();
@@ -540,8 +539,8 @@ export class GnomeForest {
         if (!focused) return;
 
         // Disable floating if floating is enabled
-        if (this.ext.contains_tag(focused.entity, Tags.Floating)) {
-            this.ext.delete_tag(focused.entity, Tags.Floating);
+        if (focused.floating) {
+            focused.floating = false;
             this.auto_tile(focused, false);
         }
 
