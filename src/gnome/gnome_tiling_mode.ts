@@ -4,17 +4,17 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import type { Rect } from '../core/geom.js';
+import type { NodeStack } from '../core/node.js';
 import type { Ext } from '../extension.js';
-import type { NodeStack } from '../node.js';
 
+import { Fork } from '../core/fork.js';
 import * as geom from '../core/geom.js';
 import { calculate } from '../core/movement.js';
+import * as Node from '../core/node.js';
 import { Orientation } from '../core/orientation.js';
 import * as exec from '../executor.js';
-import { Fork } from '../fork.js';
 import * as Lib from '../lib.js';
 import { Log } from '../log.js';
-import * as Node from '../node.js';
 import * as window from './mutter_window_handle.js';
 const { monitorID } = Lib;
 const { MutterWindowHandle } = window;

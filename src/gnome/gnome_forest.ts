@@ -1,15 +1,15 @@
 import Mtk from 'gi://Mtk';
 
+import type { Fork } from '../core/fork.js';
 import type { Ext } from '../extension.js';
 import type { Forest, MoveBy, MoveByCursor } from '../forest.js';
-import type { Fork } from '../fork.js';
 import type { MutterWindowHandle } from './mutter_window_handle.js';
 
 import { copy_rect, type Rect } from '../core/geom.js';
 import * as geom from '../core/geom.js';
+import * as node from '../core/node.js';
 import { Orientation } from '../core/orientation.js';
 import * as lib from '../lib.js';
-import * as node from '../node.js';
 import { Result, Ok, Err } from '../result.js';
 import { Stack } from '../stack.js';
 import * as tiling from './gnome_tiling_mode.js';

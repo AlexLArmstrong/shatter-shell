@@ -1,10 +1,10 @@
-import type { LayoutSizes } from './core/layout_sizes.js';
+import type { LayoutSizes } from './layout_sizes.js';
 import type { Layout, Node, NodeLeaf, TabBars } from './node.js';
 
-import { copy_rect, whole_rect, type Rect } from './core/geom.js';
-import { workspaceID } from './core/ids.js';
-import { Orientation } from './core/orientation.js';
+import { copy_rect, whole_rect, type Rect } from './geom.js';
+import { workspaceID } from './ids.js';
 import * as node from './node.js';
+import { Orientation } from './orientation.js';
 const { NodeKind } = node;
 
 const XPOS = 'x' as const;

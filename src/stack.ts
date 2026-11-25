@@ -1,11 +1,11 @@
 import type { Rect } from './core/geom.js';
+import type { NodeStack } from './core/node.js';
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
-import type { NodeStack } from './node.js';
 import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
-import * as Node from './node.js';
+import * as Node from './core/node.js';
 
 const Arena = a.Arena;
 import Atk from 'gi://Atk';

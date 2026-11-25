@@ -4,13 +4,13 @@ import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 
 import * as arena from './arena.js';
+import * as Fork from './core/fork.js';
 import * as geom from './core/geom.js';
 import { whole_rect, type Rect } from './core/geom.js';
 import * as movement from './core/movement.js';
+import * as Node from './core/node.js';
 import { Orientation } from './core/orientation.js';
-import * as Fork from './fork.js';
 import { Log } from './log.js';
-import * as Node from './node.js';
 import { Stack, TAB_HEIGHT_UNSCALED } from './stack.js';
 
 const { Arena } = arena;

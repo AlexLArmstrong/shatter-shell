@@ -1,7 +1,7 @@
+import type { Fork } from '../core/fork.js';
 import type { Rect } from '../core/geom.js';
 import type { WindowHandle } from '../core/window_handle.js';
 import type { Ext } from '../extension.js';
-import type { Fork } from '../fork.js';
 
 import * as Events from '../events.js';
 import * as focus from '../focus.js';
@@ -17,8 +17,8 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import { NodeKind } from '../core/node.js';
 import { Log } from '../log.js';
-import { NodeKind } from '../node.js';
 import { DEFAULT_HINT_COLOR } from '../settings.js';
 import { GnomeVisibility } from './gnome_visibility.js';
 

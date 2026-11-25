@@ -1,13 +1,14 @@
 import { Extension, InjectionManager } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import type { Rect } from './core/geom.js';
+import type { TabBars } from './core/node.js';
 import type { ExtEvent } from './events.js';
-import type { Fork, Tree } from './fork.js';
 import type { GnomeForest } from './gnome/gnome_forest.js';
-import type { TabBars } from './node.js';
 import type { Indicator } from './panel_settings.js';
 
 import * as Config from './config.js';
+import { Fork, type Tree } from './core/fork.js';
+import * as node from './core/node.js';
 import * as Events from './events.js';
 import * as Executor from './executor.js';
 import * as exec from './executor.js';
@@ -18,7 +19,6 @@ import { GnomeTilingMode } from './gnome/gnome_tiling_mode.js';
 import * as Window from './gnome/mutter_window_handle.js';
 import * as Keybindings from './keybindings.js';
 import * as Lib from './lib.js';
-import * as node from './node.js';
 import * as PanelSettings from './panel_settings.js';
 import * as Settings from './settings.js';
 import * as stack from './stack.js';

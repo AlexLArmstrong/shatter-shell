@@ -1,6 +1,6 @@
 import type { Fork } from './fork.js';
 
-import { copy_rect, type Rect } from './core/geom.js';
+import { copy_rect, type Rect } from './geom.js';
 
 /**
  * A node is either a fork, or a stack of windows, which is every leaf of the tree. A window on its own

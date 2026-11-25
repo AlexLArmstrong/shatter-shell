@@ -1,4 +1,4 @@
-import type { WorkspaceList } from '../fork.js';
+import type { WorkspaceList } from '../core/fork.js';
 
 /** The workspaces as mutter has them now */
 export class MutterWorkspaces implements WorkspaceList {
