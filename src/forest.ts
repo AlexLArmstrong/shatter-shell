@@ -4,7 +4,7 @@ import Mtk from 'gi://Mtk';
 
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
-import type { ShellWindow } from './window.js';
+import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 
 import * as arena from './arena.js';
 import * as geom from './core/geom.js';
@@ -102,7 +102,7 @@ export class Forest extends Ecs.World {
             if (ext.gnome_tiling_mode.window) {
                 if (Ecs.entity_eq(ext.gnome_tiling_mode.window, entity)) {
                     on_complete = () => {
-                        ext.set_overlay(window.rect());
+                        ext.set_overlay(window.frame());
 
                         if (!window.actor_exists()) return;
                     };
@@ -587,14 +587,14 @@ export class Forest extends Ecs.World {
     }
 
     /** Finds the largest tilable window on a monitor + workspace. */
-    largest_window_on(ext: Ext, entity: Entity): ShellWindow | null {
+    largest_window_on(ext: Ext, entity: Entity): MutterWindowHandle | null {
         let largest_window = null;
         let largest_size = 0;
 
         const window_compare = (entity: Entity) => {
             const window = ext.windows.get(entity);
             if (window && window.is_tilable()) {
-                const rect = window.rect();
+                const rect = window.frame();
                 const size = rect.width * rect.height;
                 if (size > largest_size) {
                     largest_size = size;
@@ -908,7 +908,7 @@ export class Forest extends Ecs.World {
                 return fork ? this.display_fork(ext, branch.inner.entity, fork, scope + 1) : 'Missing Fork';
             case Node.NodeKind.WINDOW:
                 const window = ext.windows.get(branch.inner.entity);
-                const area = window ? geom.fmt(window.rect()) : 'unknown area';
+                const area = window ? geom.fmt(window.frame()) : 'unknown area';
                 const parent = ext.gnome_forest?.attached.get(branch.inner.entity);
                 return `Window(${branch.inner.entity}) (${area}; parent: ${parent})`;
             case Node.NodeKind.STACK:
@@ -916,7 +916,7 @@ export class Forest extends Ecs.World {
 
                 for (const entity of branch.inner.entities) {
                     const window = ext.windows.get(entity);
-                    fmt += `Window(${entity}) (${window ? geom.fmt(window.rect()) : 'unknown area'}), `;
+                    fmt += `Window(${entity}) (${window ? geom.fmt(window.frame()) : 'unknown area'}), `;
                 }
 
                 return fmt + ')';
@@ -939,7 +939,7 @@ export class Forest extends Ecs.World {
     }
 }
 
-function move_window(ext: Ext, window: ShellWindow, rect: Mtk.Rectangle, on_complete: () => void) {
+function move_window(ext: Ext, window: MutterWindowHandle, rect: Mtk.Rectangle, on_complete: () => void) {
     if (!(window.meta instanceof Meta.Window)) {
         Log.error(`attempting to a window entity in a tree which lacks a Meta.Window`);
         return;
