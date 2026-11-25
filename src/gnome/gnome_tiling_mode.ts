@@ -11,7 +11,6 @@ import * as geom from '../core/geom.js';
 import { calculate } from '../core/movement.js';
 import * as exec from '../executor.js';
 import { Fork } from '../fork.js';
-// import * as Ecs from './ecs.js';
 import * as Lib from '../lib.js';
 import { Log } from '../log.js';
 import * as Node from '../node.js';

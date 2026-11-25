@@ -6,7 +6,6 @@ import type { GnomeForest } from './gnome/gnome_forest.js';
 import type { Indicator } from './panel_settings.js';
 
 import * as Config from './config.js';
-import * as Ecs from './ecs.js';
 import * as Events from './events.js';
 import * as Executor from './executor.js';
 import * as exec from './executor.js';
@@ -65,8 +64,11 @@ const { monitorID, workspaceID } = Lib;
 
 const sessionMode = Main.sessionMode as typeof Main.sessionMode & { isLocked?: boolean };
 
-export class Ext extends Ecs.System<ExtEvent> {
+export class Ext {
     extension: ShatterShellExtension | null;
+
+    /** Runs the registered events from the event loop */
+    private readonly executor = new Executor.GLibExecutor<ExtEvent>();
 
     /** Mechanism for managing keybindings */
     keybindings: Keybindings.Keybindings = new Keybindings.Keybindings(this);
@@ -157,7 +159,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     readonly gnome_tiling_mode = new GnomeTilingMode(this);
 
     constructor(extension: ShatterShellExtension, conf: Config.Config) {
-        super(new Executor.GLibExecutor());
         this.extension = extension;
 
         this.load_settings();
@@ -168,13 +169,18 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     // System interface
 
+    /** Queues an event, to be run from the event loop */
+    register(event: ExtEvent) {
+        this.executor.wake(event => this.run(event), event);
+    }
+
     /** Registers a generic callback to be executed in the event loop. */
     register_fn(callback: () => void, name?: string) {
         this.register({ tag: 'callback', callback, name });
     }
 
     /** Executes an event on the system */
-    override run(event: ExtEvent) {
+    run(event: ExtEvent) {
         switch (event.tag) {
             case 'callback':
                 event.callback();
