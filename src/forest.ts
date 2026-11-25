@@ -1,4 +1,3 @@
-import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Mtk from 'gi://Mtk';
 
@@ -8,6 +7,7 @@ import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import * as arena from './arena.js';
 import * as geom from './core/geom.js';
 import * as movement from './core/movement.js';
+import { Orientation } from './core/orientation.js';
 import * as Fork from './fork.js';
 import { Log } from './log.js';
 import * as Node from './node.js';
@@ -19,7 +19,7 @@ const { Movement } = movement;
 const { DOWN, UP, LEFT, RIGHT } = Movement;
 
 export interface MoveByCursor {
-    orientation: Clutter.Orientation;
+    orientation: Orientation;
     swap: boolean;
 }
 
@@ -316,7 +316,7 @@ export class Forest implements Fork.TreeLinks {
     }
 
     create_fork(left: Node.Node, right: Node.Node | null, area: Mtk.Rectangle, tree: Fork.Tree): Fork.Fork {
-        const orientation = area.width > area.height ? Clutter.Orientation.HORIZONTAL : Clutter.Orientation.VERTICAL;
+        const orientation = area.width > area.height ? Orientation.HORIZONTAL : Orientation.VERTICAL;
         const fork = new Fork.Fork(this, left, right, area, tree, orientation);
         this.forks.add(fork);
         return fork;

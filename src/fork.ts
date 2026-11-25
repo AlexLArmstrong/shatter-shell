@@ -1,4 +1,3 @@
-import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Mtk from 'gi://Mtk';
 
@@ -6,6 +5,7 @@ import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Node, NodeLeaf } from './node.js';
 
+import { Orientation } from './core/orientation.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import { workspaceID } from './lib.js';
 import * as node from './node.js';
@@ -105,7 +105,7 @@ export class Fork {
         right: Node | null,
         area: Mtk.Rectangle,
         tree: Tree,
-        orientation = Clutter.Orientation.HORIZONTAL,
+        orientation = Orientation.HORIZONTAL,
     ) {
         this.area = area;
         this._left = left;
@@ -113,7 +113,7 @@ export class Fork {
         this.hold(left);
         if (right) this.hold(right);
         this.tree = tree;
-        this.length_left = orientation === Clutter.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
+        this.length_left = orientation === Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
         this.prev_length_left = this.length_left;
         this.orientation = orientation;
     }
@@ -256,7 +256,7 @@ export class Fork {
 
     /** If this fork has a horizontal orientation */
     is_horizontal(): boolean {
-        return this.orientation == Clutter.Orientation.HORIZONTAL;
+        return this.orientation == Orientation.HORIZONTAL;
     }
 
     length(): number {
@@ -411,12 +411,10 @@ export class Fork {
     }
 
     rebalance_orientation() {
-        this.set_orientation(
-            this.area.height > this.area.width ? Clutter.Orientation.VERTICAL : Clutter.Orientation.HORIZONTAL,
-        );
+        this.set_orientation(this.area.height > this.area.width ? Orientation.VERTICAL : Orientation.HORIZONTAL);
     }
 
-    set_orientation(o: Clutter.Orientation) {
+    set_orientation(o: Orientation) {
         if (o !== this.orientation) {
             this.orientation = o;
             this.orientation_changed = true;
@@ -434,10 +432,7 @@ export class Fork {
 
     /** Toggles the orientation of this fork */
     toggle_orientation() {
-        this.orientation =
-            this.orientation === Clutter.Orientation.HORIZONTAL
-                ? Clutter.Orientation.VERTICAL
-                : Clutter.Orientation.HORIZONTAL;
+        this.orientation = this.orientation === Orientation.HORIZONTAL ? Orientation.VERTICAL : Orientation.HORIZONTAL;
 
         this.orientation_changed = true;
         if (this.n_toggled === 1) {

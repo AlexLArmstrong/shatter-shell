@@ -1,4 +1,3 @@
-import Clutter from 'gi://Clutter';
 import Mtk from 'gi://Mtk';
 
 import type { Ext } from '../extension.js';
@@ -7,6 +6,7 @@ import type { Fork } from '../fork.js';
 import type { MutterWindowHandle } from './mutter_window_handle.js';
 
 import * as geom from '../core/geom.js';
+import { Orientation } from '../core/orientation.js';
 import * as lib from '../lib.js';
 import * as node from '../node.js';
 import { Result, Ok, Err } from '../result.js';
@@ -406,7 +406,7 @@ export class GnomeForest {
         const matching_stack = win.stack !== null && win.stack === attach_to.stack;
         const { Left, Up, Right, Down } = tiling.Direction;
 
-        const swap = (o: Clutter.Orientation, d: tiling.Direction) => {
+        const swap = (o: Orientation, d: tiling.Direction) => {
             fork.set_orientation(o);
             const is_left = fork.left.is_window(win.id);
             const swap = (is_left && (d == Right || d == Down)) || (!is_left && (d == Left || d == Up));
@@ -420,7 +420,7 @@ export class GnomeForest {
 
         if (placement) {
             const direction =
-                placement.orientation === Clutter.Orientation.HORIZONTAL
+                placement.orientation === Orientation.HORIZONTAL
                     ? placement.swap
                         ? Left
                         : Right
@@ -672,11 +672,11 @@ export class GnomeForest {
  */
 export function cursor_placement(ext: Ext, area: Mtk.Rectangle, cursor: Mtk.Rectangle): MoveByCursor | null {
     const { LEFT, RIGHT, TOP, BOTTOM } = geom.Side;
-    const { HORIZONTAL, VERTICAL } = Clutter.Orientation;
+    const { HORIZONTAL, VERTICAL } = Orientation;
 
     const { side } = geom.nearest_side([cursor.x, cursor.y], area, ext.settings.get_stacking_with_mouse());
 
-    const res: [Clutter.Orientation, boolean] | null =
+    const res: [Orientation, boolean] | null =
         side === LEFT
             ? [HORIZONTAL, true]
             : side === RIGHT

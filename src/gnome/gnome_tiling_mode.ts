@@ -1,4 +1,3 @@
-import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Mtk from 'gi://Mtk';
 import St from 'gi://St';
@@ -9,6 +8,7 @@ import type { NodeStack } from '../node.js';
 
 import * as geom from '../core/geom.js';
 import { calculate } from '../core/movement.js';
+import { Orientation } from '../core/orientation.js';
 import * as exec from '../executor.js';
 import { Fork } from '../fork.js';
 import * as Lib from '../lib.js';
@@ -255,9 +255,9 @@ export class GnomeTilingMode {
             fork.set_area(rect);
         }
 
-        let orientation: Clutter.Orientation, reverse: boolean;
+        let orientation: Orientation, reverse: boolean;
 
-        const { HORIZONTAL, VERTICAL } = Clutter.Orientation;
+        const { HORIZONTAL, VERTICAL } = Orientation;
 
         switch (direction) {
             case Direction.Left:
@@ -340,7 +340,7 @@ export class GnomeTilingMode {
 
         const focused_id = focused.id;
 
-        const detach = (orientation: Clutter.Orientation, reverse: boolean) => {
+        const detach = (orientation: Orientation, reverse: boolean) => {
             if (!this.ext.gnome_forest) return;
 
             if (fork.right) {
@@ -371,9 +371,9 @@ export class GnomeTilingMode {
             case Direction.Left:
                 if (force_detach) {
                     Node.stack_remove(this.ext, inner, focused_id);
-                    detach(Clutter.Orientation.HORIZONTAL, false);
+                    detach(Orientation.HORIZONTAL, false);
                 } else if (!Node.stack_move_left(this.ext, inner, focused_id)) {
-                    detach(Clutter.Orientation.HORIZONTAL, false);
+                    detach(Orientation.HORIZONTAL, false);
                 }
 
                 this.ext.gnome_forest.update_stack(inner);
@@ -382,9 +382,9 @@ export class GnomeTilingMode {
             case Direction.Right:
                 if (force_detach) {
                     Node.stack_remove(this.ext, inner, focused_id);
-                    detach(Clutter.Orientation.HORIZONTAL, true);
+                    detach(Orientation.HORIZONTAL, true);
                 } else if (!Node.stack_move_right(this.ext, inner, focused_id)) {
-                    detach(Clutter.Orientation.HORIZONTAL, true);
+                    detach(Orientation.HORIZONTAL, true);
                 }
 
                 this.ext.gnome_forest.update_stack(inner);
@@ -392,12 +392,12 @@ export class GnomeTilingMode {
 
             case Direction.Up:
                 Node.stack_remove(this.ext, inner, focused_id);
-                detach(Clutter.Orientation.VERTICAL, false);
+                detach(Orientation.VERTICAL, false);
                 break;
 
             case Direction.Down:
                 Node.stack_remove(this.ext, inner, focused_id);
-                detach(Clutter.Orientation.VERTICAL, true);
+                detach(Orientation.VERTICAL, true);
                 break;
         }
 
