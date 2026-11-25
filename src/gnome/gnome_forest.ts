@@ -6,13 +6,11 @@ import type { Ext } from '../extension.js';
 import type { MutterWindowHandle } from './mutter_window_handle.js';
 
 import { copy_rect, type Rect } from '../core/geom.js';
-import * as geom from '../core/geom.js';
 import * as node from '../core/node.js';
-import { Orientation } from '../core/orientation.js';
+import { Direction, drop_action, drop_placement, swaps } from '../core/placement.js';
 import * as lib from '../lib.js';
 import { Result, Ok, Err } from '../result.js';
 import { Stack } from '../stack.js';
-import * as tiling from './gnome_tiling_mode.js';
 
 const { NodeKind } = node;
 import { Log } from '../log.js';
@@ -397,82 +395,60 @@ export class GnomeForest {
         }
     }
 
+    /** Puts a window that was dropped onto `attach_to` where the drop says, beside it or in a stack */
     place_or_stack(win: MutterWindowHandle, attach_to: MutterWindowHandle, cursor: Mtk.Rectangle): boolean {
         const fork = this.get_parent_fork(attach_to.id);
         if (!fork) return true;
 
-        const is_sibling = this.windows_are_siblings(win.id, attach_to.id);
+        const sibling = this.windows_are_siblings(win.id, attach_to.id) !== null;
 
-        const attach_area: Rect =
-            (win.stack === null && attach_to.stack === null && is_sibling) || (win.stack === null && is_sibling)
-                ? fork.area
-                : attach_to.meta.get_frame_rect();
-
-        let placement: MoveBy | null = cursor_placement(this.ext, attach_area, cursor);
+        // Beside its sibling, a window that isn't stacked takes a side of their fork
+        const area: Rect = win.stack === null && sibling ? fork.area : attach_to.meta.get_frame_rect();
+        const placement = drop_placement(area, [cursor.x, cursor.y], this.ext.settings.get_stacking_with_mouse());
         const stack = this.find_stack(attach_to.id);
 
-        const matching_stack = win.stack !== null && win.stack === attach_to.stack;
-        const { Left, Up, Right, Down } = tiling.Direction;
+        const action = drop_action({
+            placement,
+            target_stacked: stack !== null,
+            target_in_stack: attach_to.stack !== null,
+            same_stack: win.stack !== null && win.stack === attach_to.stack,
+            in_stack: win.stack !== null,
+            sibling,
+            lone_tree: fork.is_root && fork.right === null,
+        });
 
-        const swap = (o: Orientation, d: tiling.Direction) => {
-            fork.set_orientation(o);
-            const is_left = fork.left.is_window(win.id);
-            const swap = (is_left && (d == Right || d == Down)) || (!is_left && (d == Left || d == Up));
-
-            if (swap) {
-                fork.swap_branches();
-            }
-
+        const turn = (placement: MoveByCursor, direction: Direction) => {
+            fork.set_orientation(placement.orientation);
+            if (swaps(fork.left.is_window(win.id), direction)) fork.swap_branches();
             this.tile(fork, fork.area);
         };
 
-        if (placement) {
-            const direction =
-                placement.orientation === Orientation.HORIZONTAL
-                    ? placement.swap
-                        ? Left
-                        : Right
-                    : placement.swap
-                      ? Up
-                      : Down;
-
-            if (stack) {
-                if (matching_stack) {
-                    this.ext.gnome_tiling_mode.move_from_stack(stack, win, direction, true);
-                    return true;
-                } else if (attach_to.stack !== null) {
-                    const onto_stack = this.find_stack(attach_to.id);
-                    if (onto_stack) {
-                        if (is_sibling && win.stack === null) {
-                            swap(placement.orientation, direction);
-                            return true;
-                        } else {
-                            this.ext.gnome_tiling_mode.move_alongside_stack(onto_stack, win, direction);
-                        }
-
-                        return true;
-                    }
-                }
-            } else if (is_sibling && win.stack === null) {
-                swap(placement.orientation, direction);
+        switch (action.kind) {
+            case 'move_from_stack':
+                if (stack) this.ext.gnome_tiling_mode.move_from_stack(stack, win, action.direction, true);
                 return true;
-            } else if (fork.is_root && fork.right === null) {
+            case 'move_alongside_stack':
+                if (stack) this.ext.gnome_tiling_mode.move_alongside_stack(stack, win, action.direction);
+                return true;
+            case 'swap':
+                turn(action.placement, action.direction);
+                return true;
+            case 'attach_and_swap':
                 this.detach_window(win.id);
-                this.attach_to_window(attach_to, win, placement);
-                swap(placement.orientation, direction);
+                this.attach_to_window(attach_to, win, action.placement);
+                turn(action.placement, action.direction);
                 return true;
-            }
-        } else if (matching_stack) {
-            this.tile(fork, fork.area);
-            return true;
-        } else {
-            if (attach_to.stack === null) this.create_stack(attach_to);
-
-            placement = { auto: 0 };
+            case 'retile':
+                this.tile(fork, fork.area);
+                return true;
+            case 'stack':
+                if (attach_to.stack === null) this.create_stack(attach_to);
+                this.detach_window(win.id);
+                return this.attach_to_window(attach_to, win, { auto: 0 });
+            case 'attach':
+                this.detach_window(win.id);
+                return this.attach_to_window(attach_to, win, action.placement);
         }
-
-        this.detach_window(win.id);
-        return this.attach_to_window(attach_to, win, placement);
     }
 
     /** Schedules a fork to be reflowed */
@@ -672,28 +648,4 @@ export class GnomeForest {
 
         return Ok(void 0);
     }
-}
-
-/** Enables deriving the orientation that a window will be attached by the mouse position.
- *
- * A null indicates that the window should be stacked
- */
-export function cursor_placement(ext: Ext, area: Rect, cursor: Mtk.Rectangle): MoveByCursor | null {
-    const { LEFT, RIGHT, TOP, BOTTOM } = geom.Side;
-    const { HORIZONTAL, VERTICAL } = Orientation;
-
-    const { side } = geom.nearest_side([cursor.x, cursor.y], area, ext.settings.get_stacking_with_mouse());
-
-    const res: [Orientation, boolean] | null =
-        side === LEFT
-            ? [HORIZONTAL, true]
-            : side === RIGHT
-              ? [HORIZONTAL, false]
-              : side === TOP
-                ? [VERTICAL, true]
-                : side === BOTTOM
-                  ? [VERTICAL, false]
-                  : null;
-
-    return res ? { orientation: res[0], swap: res[1] } : null;
 }

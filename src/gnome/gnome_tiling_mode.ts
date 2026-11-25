@@ -12,6 +12,7 @@ import * as geom from '../core/geom.js';
 import { calculate } from '../core/movement.js';
 import * as Node from '../core/node.js';
 import { Orientation } from '../core/orientation.js';
+import { Direction } from '../core/placement.js';
 import * as exec from '../executor.js';
 import * as Lib from '../lib.js';
 import { Log } from '../log.js';
@@ -19,12 +20,7 @@ import * as window from './mutter_window_handle.js';
 const { monitorID } = Lib;
 const { MutterWindowHandle } = window;
 
-export enum Direction {
-    Left,
-    Up,
-    Right,
-    Down,
-}
+export { Direction };
 
 /** The keyboard's tiling mode: the user moves, resizes and swaps the focused window, and accepts or rejects it */
 export class GnomeTilingMode {
