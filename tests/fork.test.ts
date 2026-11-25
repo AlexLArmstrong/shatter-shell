@@ -19,6 +19,9 @@ class FakeWorkspaces implements WorkspaceList {
     at(index: number) {
         return this.all[index] ?? null;
     }
+    active() {
+        return this.all[0]!;
+    }
 }
 
 /** The links back up a tree, which only the forks keep */

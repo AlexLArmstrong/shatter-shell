@@ -14,6 +14,7 @@ import * as Executor from './executor.js';
 import * as exec from './executor.js';
 import * as Focus from './focus.js';
 import { GnomeGrab } from './gnome/gnome_grab.js';
+import { GnomeLayout } from './gnome/gnome_layout.js';
 import { GnomeSizes } from './gnome/gnome_sizes.js';
 import { GnomeTilingMode } from './gnome/gnome_tiling_mode.js';
 import * as Window from './gnome/mutter_window_handle.js';
@@ -110,6 +111,9 @@ export class Ext {
     readonly gnome_grab = new GnomeGrab(this, this.grab);
 
     readonly gnome_sizes = new GnomeSizes(this);
+
+    /** Lays out the trees and moves their windows in GNOME */
+    readonly gnome_layout = new GnomeLayout(this);
 
     /** A display config update is triggered on a workspace addition */
     ignore_display_update: boolean = false;
@@ -805,7 +809,7 @@ export class Ext {
                     // The fork may have left the tree while the window was minimized
                     if (!fork.detached) {
                         if (typeof attachment === 'boolean') {
-                            gnome_forest.forest.attach_fork(this, fork, win.id, attachment);
+                            gnome_forest.forest.attach_fork(fork, win.id, attachment);
                             gnome_forest.tile(fork, fork.area);
                             return;
                         } else {
@@ -1335,7 +1339,7 @@ export class Ext {
                         ? workspace_on(monitor, claimed, monitor => this.find_unused_workspace(monitor)[0])
                         : fork.workspace;
 
-                    forest.migrate(this, fork, work_area, monitor, workspace);
+                    this.gnome_layout.migrate(forest, fork, work_area, monitor, workspace);
                     fork.set_ratio(fork.length() / 2);
 
                     return true;

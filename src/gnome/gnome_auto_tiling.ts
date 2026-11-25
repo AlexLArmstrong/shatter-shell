@@ -4,6 +4,7 @@ import type { Ext } from '../extension.js';
 import type { ExtensionSettings } from '../settings.js';
 
 import { Forest } from '../forest.js';
+import { Log } from '../log.js';
 import { GnomeForest } from './gnome_forest.js';
 import { MutterWorkspaces } from './mutter_workspaces.js';
 
@@ -19,7 +20,16 @@ export class GnomeAutoTiling {
         const { ext } = this;
         return new GnomeForest(
             ext,
-            new Forest(new MutterWorkspaces())
+            new Forest(
+                new MutterWorkspaces(),
+                ext.tab_bars,
+                ext.sizes,
+                {
+                    has: window => ext.windows.has(window),
+                    has_focus: window => ext.windows.get(window)?.meta.has_focus() ?? false,
+                },
+                message => Log.warn(message),
+            )
                 .connect_on_attach(ext.on_tile_attach.bind(ext))
                 .connect_on_detach(ext.on_tile_detach.bind(ext)),
         );

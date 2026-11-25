@@ -438,14 +438,20 @@ export class GnomeTilingMode {
                 ) => {
                     if (func(toparea, crect, mov) || crect.equal(last)) return;
 
-                    this.ext.gnome_forest!.forest.resize(this.ext, fork, this.window!, calculate(last, crect), crect);
+                    this.ext.gnome_layout.resize(
+                        this.ext.gnome_forest!.forest,
+                        fork,
+                        this.window!,
+                        calculate(last, crect),
+                        crect,
+                    );
                     last = crect.copy();
                 };
 
                 resize(mov1, callback);
                 resize(mov2, callback);
 
-                this.ext.gnome_forest.forest.arrange(this.ext);
+                this.ext.gnome_layout.arrange(this.ext.gnome_forest.forest);
 
                 this.ext.register_fn(() => this.ext.set_overlay(window.frame()));
             }

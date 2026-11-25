@@ -1,7 +1,4 @@
-import Meta from 'gi://Meta';
-
-import type { Ext } from './extension.js';
-import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
+import type { LayoutSizes } from './core/layout_sizes.js';
 
 import * as arena from './arena.js';
 import * as Fork from './core/fork.js';
@@ -10,8 +7,7 @@ import { whole_rect, type Rect } from './core/geom.js';
 import * as movement from './core/movement.js';
 import * as Node from './core/node.js';
 import { Orientation } from './core/orientation.js';
-import { Log } from './log.js';
-import { Stack, TAB_HEIGHT_UNSCALED } from './stack.js';
+import { Stack } from './stack.js';
 
 const { Arena } = arena;
 const { Movement } = movement;
@@ -50,8 +46,25 @@ interface Request {
  * forks will be dynamically removed and created to accomodate the new
  * arrangement.
  */
+/** What the forest needs to know about the windows that it tiles */
+export interface WindowStates {
+    /** Whether the window is managed */
+    has(window: WindowId): boolean;
+
+    has_focus(window: WindowId): boolean;
+}
+
+/** What laying out a tree needs from outside of the forest */
+export type LayoutSource = Omit<Node.Layout, 'place' | 'restack'>;
+
 export class Forest implements Fork.TreeLinks {
-    constructor(private readonly workspaces: Fork.WorkspaceList) {}
+    constructor(
+        private readonly workspaces: Fork.WorkspaceList,
+        private readonly tabs: Node.TabBars,
+        private readonly sizes: LayoutSizes,
+        private readonly windows: WindowStates,
+        private readonly warn: (message: string) => void,
+    ) {}
 
     private readonly trees_ = new Set<Fork.Tree>();
 
@@ -103,53 +116,13 @@ export class Forest implements Fork.TreeLinks {
     /** Likewise for detachments */
     on_detach: (child: WindowId) => void = () => {};
 
-    measure(ext: Ext, fork: Fork.Fork, area: Rect) {
-        fork.measure(this.layout(ext), area);
-    }
-
-    /** Measures and arranges windows in the tree from the given fork to the specified area. */
-    tile(ext: Ext, fork: Fork.Fork, area: Rect) {
-        this.measure(ext, fork, area);
-        this.arrange(ext);
-    }
-
-    /** Place all windows into their calculated positions. */
-    arrange(ext: Ext) {
-        for (const [window_id, r] of this.requested) {
-            const window = ext.windows.get(window_id);
-            if (!window) continue;
-
-            let on_complete = () => {
-                if (!window.actor_exists()) return;
-            };
-
-            if (ext.gnome_tiling_mode.window !== null) {
-                if (ext.gnome_tiling_mode.window === window_id) {
-                    on_complete = () => {
-                        ext.set_overlay(window.frame());
-
-                        if (!window.actor_exists()) return;
-                    };
-                }
-            }
-
-            move_window(ext, window, r.rect, on_complete);
-        }
-
-        this.requested.clear();
-
-        for (const [stack] of this.stack_updates.splice(0)) {
-            ext.gnome_forest?.update_stack(stack);
-        }
-    }
-
-    attach_fork(ext: Ext, fork: Fork.Fork, window: WindowId, is_left: boolean) {
+    attach_fork(fork: Fork.Fork, window: WindowId, is_left: boolean) {
         const node = Node.Node.window(window);
 
         if (is_left) {
             if (fork.right) {
                 fork.right = Node.Node.fork(
-                    this.create_fork(fork.left, fork.right, fork.area_of_right(ext.sizes), fork.tree),
+                    this.create_fork(fork.left, fork.right, fork.area_of_right(this.sizes), fork.tree),
                 );
             } else {
                 fork.right = fork.left;
@@ -159,7 +132,7 @@ export class Forest implements Fork.TreeLinks {
         } else {
             if (fork.right) {
                 fork.left = Node.Node.fork(
-                    this.create_fork(fork.left, fork.right, fork.area_of_left(ext.sizes), fork.tree),
+                    this.create_fork(fork.left, fork.right, fork.area_of_left(this.sizes), fork.tree),
                 );
             }
 
@@ -169,43 +142,30 @@ export class Forest implements Fork.TreeLinks {
         this.on_attach(window);
     }
 
-    attach_stack(
-        ext: Ext,
-        stack: Node.NodeStack,
-        fork: Fork.Fork,
-        new_id: WindowId,
-        stack_from_left: boolean,
-    ): Fork.Fork | null {
+    attach_stack(stack: Node.NodeStack, fork: Fork.Fork, new_id: WindowId, stack_from_left: boolean): Fork.Fork | null {
         const container = this.view_of(stack);
         if (container) {
-            const window = ext.windows.get(new_id);
-            if (window) {
+            if (this.windows.has(new_id)) {
                 this.on_attach(new_id);
-                Node.stack_insert(ext.tab_bars, stack, new_id, stack_from_left);
+                Node.stack_insert(this.tabs, stack, new_id, stack_from_left);
 
-                if (window.meta.has_focus()) {
+                if (this.windows.has_focus(new_id)) {
                     container.activate(new_id);
                 }
 
                 return fork;
             } else {
-                Log.warn('attempted to attach window to stack that does not exist');
+                this.warn('attempted to attach window to stack that does not exist');
             }
         } else {
-            Log.warn('attempted to attach to stack that does not exist');
+            this.warn('attempted to attach to stack that does not exist');
         }
 
         return null;
     }
 
     /** Attaches a `new` window to the fork which `onto` is attached to. */
-    attach_window(
-        ext: Ext,
-        onto_id: WindowId,
-        new_id: WindowId,
-        place_by: MoveBy,
-        stack_from_left: boolean,
-    ): Fork.Fork | null {
+    attach_window(onto_id: WindowId, new_id: WindowId, place_by: MoveBy, stack_from_left: boolean): Fork.Fork | null {
         /** Place a window in a fork based on where the window was originally located */
         function place_by_keyboard(fork: Fork.Fork, src: Rect, left: Rect, right: Rect) {
             const from: [number, number] = [src.x + src.width / 2, src.y + src.height / 2];
@@ -241,7 +201,7 @@ export class Forest implements Fork.TreeLinks {
 
         /** Create a fork and place this new fork on the left branch */
         const fork_and_place_on_left = (fork: Fork.Fork): Fork.Fork | null => {
-            const area = fork.area_of_left(ext.sizes);
+            const area = fork.area_of_left(this.sizes);
 
             const new_fork = this.create_fork(fork.left, right_node, area, fork.tree);
 
@@ -256,7 +216,7 @@ export class Forest implements Fork.TreeLinks {
 
         /** Create a new fork and place this new fork on the right branch */
         const fork_and_place_on_right = (fork: Fork.Fork, right_branch: Node.Node): Fork.Fork | null => {
-            const area = fork.area_of_right(ext.sizes);
+            const area = fork.area_of_right(this.sizes);
             const new_fork = this.create_fork(right_branch, right_node, area, fork.tree);
 
             fork.right = Node.Node.fork(new_fork);
@@ -290,13 +250,13 @@ export class Forest implements Fork.TreeLinks {
             }
         } else if (fork.left.is_in_stack(onto_id)) {
             const stack = fork.left.inner;
-            return this.attach_stack(ext, stack, fork, new_id, stack_from_left);
+            return this.attach_stack(stack, fork, new_id, stack_from_left);
         } else if (fork.right) {
             if (fork.right.is_window(onto_id)) {
                 return fork_and_place_on_right(fork, fork.right);
             } else if (fork.right.is_in_stack(onto_id)) {
                 const stack = fork.right.inner;
-                return this.attach_stack(ext, stack, fork, new_id, stack_from_left);
+                return this.attach_stack(stack, fork, new_id, stack_from_left);
             }
         }
 
@@ -339,10 +299,8 @@ export class Forest implements Fork.TreeLinks {
         }
     }
 
-    add_tree(window: WindowId, area: Rect, id: MonitorWorkspaceID): Fork.Tree {
-        const manager = global.workspace_manager;
-        const workspace = manager.get_workspace_by_index(id[1]) ?? manager.get_active_workspace();
-        const on_primary = global.display.get_primary_monitor() === id[0];
+    add_tree(window: WindowId, area: Rect, id: MonitorWorkspaceID, on_primary: boolean): Fork.Tree {
+        const workspace = this.workspaces.at(id[1]) ?? this.workspaces.active();
         const tree = new Fork.Tree(id[0], workspace, on_primary, this.workspaces);
         tree.root = this.create_fork(Node.Node.window(window), null, area, tree);
         this.trees_.add(tree);
@@ -360,7 +318,7 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Detaches a window from its fork, re-arranging the fork's tree as necessary */
-    detach(ext: Ext, fork: Fork.Fork, window: WindowId): Fork.Fork | null {
+    detach(fork: Fork.Fork, window: WindowId): Fork.Fork | null {
         if (fork.detached) return null;
 
         // The fork which has been modified, and requires rebalancing
@@ -376,7 +334,7 @@ export class Forest implements Fork.TreeLinks {
             // The window only leaves its stack, which keeps its place in the tree
             reflow_fork = fork;
             stack_detach = true;
-            Node.stack_remove(ext.tab_bars, branch.inner, window);
+            Node.stack_remove(this.tabs, branch.inner, window);
         } else if (branch?.is_leaf()) {
             // The leaf leaves the tree along with its last window, whether or not it has tabs
             if (branch.inner.idx !== null) this.stacks.remove(branch.inner.idx)?.destroy();
@@ -425,17 +383,6 @@ export class Forest implements Fork.TreeLinks {
         return reflow_fork;
     }
 
-    /** Creates a string representation of every fork in the world */
-    fmt(ext: Ext) {
-        let fmt = '';
-
-        for (const { root: fork } of this.trees()) {
-            fmt += ' ' + this.display_fork(ext, fork, 1) + '\n';
-        }
-
-        return fmt;
-    }
-
     trees(): Iterable<Fork.Tree> {
         return this.trees_;
     }
@@ -450,36 +397,42 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Grows a sibling a fork. */
-    private grow_sibling(ext: Ext, fork_c: Fork.Fork, is_left: boolean, movement: movement.Movement, crect: Rect) {
-        const resize_fork = () => this.resize_fork_(ext, fork_c, crect, movement, false);
+    private grow_sibling(
+        layout: Node.Layout,
+        fork_c: Fork.Fork,
+        is_left: boolean,
+        movement: movement.Movement,
+        crect: Rect,
+    ) {
+        const resize_fork = () => this.resize_fork_(layout, fork_c, crect, movement, false);
 
         if (fork_c.is_horizontal()) {
             if ((movement & (DOWN | UP)) != 0) {
                 resize_fork();
             } else if (is_left) {
                 if ((movement & RIGHT) != 0) {
-                    this.readjust_fork_ratio_by_left(ext, crect.width, fork_c);
+                    this.readjust_fork_ratio_by_left(layout, crect.width, fork_c);
                 } else {
                     resize_fork();
                 }
             } else if ((movement & RIGHT) != 0) {
                 resize_fork();
             } else {
-                this.readjust_fork_ratio_by_right(ext, crect.width, fork_c, fork_c.area.width);
+                this.readjust_fork_ratio_by_right(layout, crect.width, fork_c, fork_c.area.width);
             }
         } else {
             if ((movement & (LEFT | RIGHT)) != 0) {
                 resize_fork();
             } else if (is_left) {
                 if ((movement & DOWN) != 0) {
-                    this.readjust_fork_ratio_by_left(ext, crect.height, fork_c);
+                    this.readjust_fork_ratio_by_left(layout, crect.height, fork_c);
                 } else {
                     resize_fork();
                 }
             } else if ((movement & DOWN) != 0) {
                 resize_fork();
             } else {
-                this.readjust_fork_ratio_by_right(ext, crect.height, fork_c, fork_c.area.height);
+                this.readjust_fork_ratio_by_right(layout, crect.height, fork_c, fork_c.area.height);
             }
         }
     }
@@ -509,98 +462,27 @@ export class Forest implements Fork.TreeLinks {
         }
     }
 
-    /** Finds the largest tilable window on a monitor + workspace. */
-    largest_window_on(ext: Ext, fork: Fork.Fork): MutterWindowHandle | null {
-        let largest_window = null;
-        let largest_size = 0;
-
-        const window_compare = (window_id: WindowId) => {
-            const window = ext.windows.get(window_id);
-            if (window && window.is_tilable()) {
-                const rect = window.frame();
-                const size = rect.width * rect.height;
-                if (size > largest_size) {
-                    largest_size = size;
-                    largest_window = window;
-                }
-            }
-        };
-
-        for (const node of this.iter(fork)) {
-            if (node.is_leaf()) window_compare(node.inner.windows[0]!);
-        }
-
-        return largest_window;
-    }
-
     /** Resize a window from a given fork based on a supplied movement. */
-    resize(ext: Ext, fork_c: Fork.Fork, window_id: WindowId, movement: movement.Movement, crect: Rect) {
+    resize(layout: Node.Layout, fork_c: Fork.Fork, window_id: WindowId, movement: movement.Movement, crect: Rect) {
         const is_left = fork_c.left.has(window_id);
         if ((movement & Movement.SHRINK) != 0) {
-            this.shrink_sibling(ext, fork_c, is_left, movement, crect);
+            this.shrink_sibling(layout, fork_c, is_left, movement, crect);
         } else {
-            this.grow_sibling(ext, fork_c, is_left, movement, crect);
+            this.grow_sibling(layout, fork_c, is_left, movement, crect);
         }
     }
 
     /** How this forest's trees are laid out, with the extension's sizes, and where the results go */
-    layout(ext: Ext): Node.Layout {
+    layout(source: LayoutSource): Node.Layout {
         return {
-            gap_inner: ext.sizes.gap_inner,
-            gap_inner_half: ext.sizes.gap_inner_half,
-            tab_height: () => ext.sizes.scale * TAB_HEIGHT_UNSCALED,
-            manually_moved: () => ext.grab.window !== null || ext.gnome_tiling_mode.resizing_window,
-            minimum_size: window => ext.windows.get(window)?.minimum_size() ?? [0, 0],
+            gap_inner: source.gap_inner,
+            gap_inner_half: source.gap_inner_half,
+            tab_height: () => source.tab_height(),
+            manually_moved: () => source.manually_moved(),
+            minimum_size: window => source.minimum_size(window),
             place: (window, parent, rect) => this.record(window, parent, rect),
-            restack: (leaf, parent) => {
-                if (ext.gnome_forest) ext.gnome_forest.forest.stack_updates.push([leaf, parent]);
-            },
+            restack: (leaf, parent) => this.stack_updates.push([leaf, parent]),
         };
-    }
-
-    /** Moves a tree to another monitor and workspace, and lays it out in `area` there */
-    migrate(ext: Ext, fork: Fork.Fork, area: Rect, monitor: MonitorID, workspace: WorkspaceID) {
-        if (ext.gnome_forest && fork.is_root) {
-            const primary = global.display.get_primary_monitor() === monitor;
-
-            fork.monitor = monitor;
-            fork.workspace = workspace;
-            fork.on_primary_display = primary;
-
-            const blocked = [];
-
-            for (const child of this.iter(fork)) {
-                switch (child.inner.kind) {
-                    case Node.NodeKind.FORK:
-                        // Its monitor and workspace are the tree's, which have already changed
-                        break;
-                    case Node.NodeKind.STACK:
-                        for (const window_id of child.inner.windows) {
-                            const window = ext.windows.get(window_id);
-
-                            if (window) {
-                                ext.size_signals_block(window);
-                                window.reassignment = false;
-                                window.meta.change_workspace_by_index(workspace, true);
-                                blocked.push(window);
-                            }
-                        }
-                }
-            }
-
-            area.x = Math.trunc(area.x + ext.sizes.gap_outer);
-            area.y = Math.trunc(area.y + ext.sizes.gap_outer);
-            area.width = Math.trunc(area.width - ext.sizes.gap_outer * 2);
-            area.height = Math.trunc(area.height - ext.sizes.gap_outer * 2);
-
-            fork.set_area(geom.copy_rect(area));
-            fork.measure(this.layout(ext), area);
-            this.arrange(ext);
-
-            for (const window of blocked) {
-                ext.size_signals_unblock(window);
-            }
-        }
     }
 
     /** Records window movements which have been queued. */
@@ -645,7 +527,7 @@ export class Forest implements Fork.TreeLinks {
 
     private reassign_children_to_parent(p_fork: Fork.Fork, c_fork: Fork.Fork) {
         if (c_fork.detached) {
-            Log.error(`Fork(${c_fork.id}) does not exist`);
+            this.warn(`Fork(${c_fork.id}) does not exist`);
             return;
         }
 
@@ -656,25 +538,36 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Readjusts the division of space between the left and right siblings of a fork */
-    private readjust_fork_ratio_by_left(ext: Ext, left_length: number, fork: Fork.Fork) {
-        fork.set_ratio(left_length).measure(this.layout(ext), fork.area);
+    private readjust_fork_ratio_by_left(layout: Node.Layout, left_length: number, fork: Fork.Fork) {
+        fork.set_ratio(left_length).measure(layout, fork.area);
     }
 
     /** Readjusts the division of space between the left and right siblings of a fork
      *
      * Determines the size of the left sibling based on the new length of the right sibling
      */
-    private readjust_fork_ratio_by_right(ext: Ext, right_length: number, fork: Fork.Fork, fork_length: number) {
-        this.readjust_fork_ratio_by_left(ext, fork_length - right_length, fork);
+    private readjust_fork_ratio_by_right(
+        layout: Node.Layout,
+        right_length: number,
+        fork: Fork.Fork,
+        fork_length: number,
+    ) {
+        this.readjust_fork_ratio_by_left(layout, fork_length - right_length, fork);
     }
 
     /** Resizes a fork in the direction that a movement requests */
-    private resize_fork_(ext: Ext, child_fork: Fork.Fork, crect: Rect, mov: movement.Movement, shrunk: boolean) {
+    private resize_fork_(
+        layout: Node.Layout,
+        child_fork: Fork.Fork,
+        crect: Rect,
+        mov: movement.Movement,
+        shrunk: boolean,
+    ) {
         let parent = this.parent_of(child_fork);
         let child = child_fork;
 
         if (!parent) {
-            child.measure(this.layout(ext), child.area);
+            child.measure(layout, child.area);
             return;
         }
 
@@ -736,103 +629,46 @@ export class Forest implements Fork.TreeLinks {
 
         child.set_ratio(length);
 
-        child.measure(this.layout(ext), child.area);
+        child.measure(layout, child.area);
     }
 
     /** Shrinks the sibling of a fork, possibly shrinking the fork itself */
-    private shrink_sibling(ext: Ext, fork_c: Fork.Fork, is_left: boolean, movement: movement.Movement, crect: Rect) {
-        const resize_fork = () => this.resize_fork_(ext, fork_c, crect, movement, true);
+    private shrink_sibling(
+        layout: Node.Layout,
+        fork_c: Fork.Fork,
+        is_left: boolean,
+        movement: movement.Movement,
+        crect: Rect,
+    ) {
+        const resize_fork = () => this.resize_fork_(layout, fork_c, crect, movement, true);
         if (fork_c.is_horizontal()) {
             if ((movement & (DOWN | UP)) != 0) {
                 resize_fork();
             } else if (is_left) {
                 if ((movement & LEFT) != 0) {
-                    this.readjust_fork_ratio_by_left(ext, crect.width, fork_c);
+                    this.readjust_fork_ratio_by_left(layout, crect.width, fork_c);
                 } else {
                     resize_fork();
                 }
             } else if ((movement & LEFT) != 0) {
                 resize_fork();
             } else {
-                this.readjust_fork_ratio_by_right(ext, crect.width, fork_c, fork_c.area.width);
+                this.readjust_fork_ratio_by_right(layout, crect.width, fork_c, fork_c.area.width);
             }
         } else {
             if ((movement & (LEFT | RIGHT)) != 0) {
                 resize_fork();
             } else if (is_left) {
                 if ((movement & UP) != 0) {
-                    this.readjust_fork_ratio_by_left(ext, crect.height, fork_c);
+                    this.readjust_fork_ratio_by_left(layout, crect.height, fork_c);
                 } else {
                     resize_fork();
                 }
             } else if ((movement & UP) != 0) {
                 resize_fork();
             } else {
-                this.readjust_fork_ratio_by_right(ext, crect.height, fork_c, fork_c.area.height);
+                this.readjust_fork_ratio_by_right(layout, crect.height, fork_c, fork_c.area.height);
             }
         }
     }
-
-    private display_branch(ext: Ext, branch: Node.Node, scope: number): string {
-        switch (branch.inner.kind) {
-            case Node.NodeKind.FORK:
-                const fork = branch.inner.fork;
-                return fork.detached ? 'Missing Fork' : this.display_fork(ext, fork, scope + 1);
-            case Node.NodeKind.STACK:
-                const lone = branch.lone_window();
-                if (lone !== null) {
-                    const window = ext.windows.get(lone);
-                    const area = window ? geom.fmt(window.frame()) : 'unknown area';
-                    const parent = ext.gnome_forest?.attached.get(lone);
-                    return `Window(${lone}) (${area}; parent: ${parent?.id})`;
-                }
-
-                let fmt = 'Stack(';
-
-                for (const window_id of branch.inner.windows) {
-                    const window = ext.windows.get(window_id);
-                    fmt += `Window(${window_id}) (${window ? geom.fmt(window.frame()) : 'unknown area'}), `;
-                }
-
-                return fmt + ')';
-        }
-    }
-
-    display_fork(ext: Ext, fork: Fork.Fork, scope: number): string {
-        let fmt = `Fork(${fork.id}) [${geom.fmt(fork.area)}]: {\n`;
-
-        fmt += ' '.repeat((1 + scope) * 2) + `workspace: (${fork.workspace}),\n`;
-        fmt += ' '.repeat((1 + scope) * 2) + `left: ${this.display_branch(ext, fork.left, scope)},\n`;
-        fmt += ' '.repeat((1 + scope) * 2) + `parent: ${this.parent_of(fork)?.id},\n`;
-
-        if (fork.right) {
-            fmt += ' '.repeat((1 + scope) * 2) + `right: ${this.display_branch(ext, fork.right, scope)},\n`;
-        } else if (!fork.is_root) {
-            // Only the root fork of a tree may have one child
-            fmt += ' '.repeat((1 + scope) * 2) + `right: none, which only a root fork may lack,\n`;
-        }
-
-        fmt += ' '.repeat(scope * 2) + '}';
-        return fmt;
-    }
-}
-
-function move_window(ext: Ext, window: MutterWindowHandle, rect: Rect, on_complete: () => void) {
-    if (!(window.meta instanceof Meta.Window)) {
-        Log.error(`attempting to move a window in a tree which lacks a Meta.Window`);
-        return;
-    }
-
-    const actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
-
-    if (!actor) {
-        Log.warn(`Window(${window.id}) does not have an actor, and therefore cannot be moved`);
-        return;
-    }
-
-    ext.size_signals_block(window);
-    window.move(rect, () => {
-        on_complete();
-        ext.size_signals_unblock(window);
-    });
 }

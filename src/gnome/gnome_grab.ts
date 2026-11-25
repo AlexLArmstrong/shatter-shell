@@ -170,10 +170,10 @@ export class GnomeGrab {
 
         const neighbour_rect = (side: EdgeSide) => ext.focus_selector.toward(ext, side, win)?.frame() ?? null;
         if (movement_is_valid(movement, win.frame(), neighbour_rect)) {
-            forest.resize(ext, fork, win.id, movement, crect);
-            forest.arrange(ext);
+            ext.gnome_layout.resize(forest, fork, win.id, movement, crect);
+            ext.gnome_layout.arrange(forest);
         } else {
-            forest.tile(ext, fork, fork.area);
+            ext.gnome_layout.tile(forest, fork, fork.area);
         }
     }
 

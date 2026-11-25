@@ -14,4 +14,8 @@ export class MutterWorkspaces implements WorkspaceList {
     at(index: number): object | null {
         return global.workspace_manager.get_workspace_by_index(index);
     }
+
+    active(): object {
+        return global.workspace_manager.get_active_workspace();
+    }
 }

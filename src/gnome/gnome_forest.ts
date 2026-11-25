@@ -132,7 +132,8 @@ export class GnomeForest {
             rect.height -= this.ext.sizes.gap_outer * 2;
         }
 
-        const fork = this.forest.add_tree(win.id, rect.copy(), workspace_id).root;
+        const on_primary = global.display.get_primary_monitor() === workspace_id[0];
+        const fork = this.forest.add_tree(win.id, rect.copy(), workspace_id, on_primary).root;
         this.forest.on_attach(win.id);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
@@ -147,7 +148,7 @@ export class GnomeForest {
         move_by: MoveBy,
         stack_from_left: boolean = true,
     ): boolean {
-        const attached = this.forest.attach_window(this.ext, attachee.id, attacher.id, move_by, stack_from_left);
+        const attached = this.forest.attach_window(attachee.id, attacher.id, move_by, stack_from_left);
 
         if (attached) {
             const fork = attached;
@@ -179,7 +180,7 @@ export class GnomeForest {
         const tree = this.forest.find_tree(id);
 
         if (tree) {
-            const onto = this.forest.largest_window_on(this.ext, tree.root);
+            const onto = this.largest_window_on(tree.root);
             if (onto) {
                 if (this.attach_to_window(onto, win, { auto: 0 })) {
                     return;
@@ -233,7 +234,7 @@ export class GnomeForest {
 
         const prev_fork = this.attached.get(win);
         if (prev_fork) {
-            const reflow_fork = this.forest.detach(this.ext, prev_fork, win);
+            const reflow_fork = this.forest.detach(prev_fork, win);
 
             if (reflow_fork) {
                 const fork = reflow_fork;
@@ -314,11 +315,35 @@ export class GnomeForest {
         return this.attached.get(window);
     }
 
+    /** Finds the largest tilable window on a monitor + workspace. */
+    private largest_window_on(fork: Fork): MutterWindowHandle | null {
+        let largest_window = null;
+        let largest_size = 0;
+
+        const window_compare = (window_id: WindowId) => {
+            const window = this.ext.windows.get(window_id);
+            if (window && window.is_tilable()) {
+                const rect = window.frame();
+                const size = rect.width * rect.height;
+                if (size > largest_size) {
+                    largest_size = size;
+                    largest_window = window;
+                }
+            }
+        };
+
+        for (const node of this.forest.iter(fork)) {
+            if (node.is_leaf()) window_compare(node.inner.windows[0]!);
+        }
+
+        return largest_window;
+    }
+
     largest_on_workspace(monitor: MonitorID, workspace: WorkspaceID): MutterWindowHandle | null {
         const workspace_id: MonitorWorkspaceID = [monitor, workspace];
         const tree = this.forest.find_tree(workspace_id);
         if (tree) {
-            return this.forest.largest_window_on(this.ext, tree.root);
+            return this.largest_window_on(tree.root);
         }
 
         return null;
@@ -479,7 +504,7 @@ export class GnomeForest {
     }
 
     tile(fork: Fork, area: Rect) {
-        this.forest.tile(this.ext, fork, area);
+        this.ext.gnome_layout.tile(this.forest, fork, area);
     }
 
     toggle_floating() {
@@ -526,21 +551,21 @@ export class GnomeForest {
     unstack(fork: Fork, win: MutterWindowHandle, toggled: boolean = false) {
         if (toggled && fork.left.is_window(win.id)) {
             this.add_tabs(fork, fork.left);
-            fork.measure(this.forest.layout(this.ext), fork.area);
+            this.ext.gnome_layout.measure(this.forest, fork, fork.area);
         } else if (fork.left.is_in_stack(win.id)) {
             // Only a stack of one window loses its tabs
             if (fork.left.inner.windows.length === 1) {
                 this.remove_tabs(fork.left);
-                fork.measure(this.forest.layout(this.ext), fork.area);
+                this.ext.gnome_layout.measure(this.forest, fork, fork.area);
                 if (!fork.right) this.forest.reassign_to_parent(fork, fork.left);
             }
         } else if (toggled && fork.right && fork.right.is_window(win.id)) {
             this.add_tabs(fork, fork.right);
-            fork.measure(this.forest.layout(this.ext), fork.area);
+            this.ext.gnome_layout.measure(this.forest, fork, fork.area);
         } else if (fork.right && fork.right.is_in_stack(win.id)) {
             if (fork.right.inner.windows.length === 1) {
                 this.remove_tabs(fork.right);
-                fork.measure(this.forest.layout(this.ext), fork.area);
+                this.ext.gnome_layout.measure(this.forest, fork, fork.area);
             }
         }
 
@@ -572,7 +597,7 @@ export class GnomeForest {
         if (!leaf) return;
 
         this.add_tabs(fork, leaf);
-        fork.measure(this.forest.layout(this.ext), fork.area);
+        this.ext.gnome_layout.measure(this.forest, fork, fork.area);
     }
 
     /** Draws a stack again from the tree, and places its tab bar if it has been measured */
@@ -647,7 +672,7 @@ export class GnomeForest {
         if (!fork.right) return Ok(void 0);
 
         fork.toggle_orientation();
-        this.forest.measure(this.ext, fork, fork.area);
+        this.ext.gnome_layout.measure(this.forest, fork, fork.area);
 
         for (const child of this.forest.iter(fork)) {
             if (child.inner.kind != NodeKind.FORK) continue;
@@ -655,13 +680,13 @@ export class GnomeForest {
             const child_fork = child.inner.fork;
             if (!child_fork.detached) {
                 child_fork.rebalance_orientation();
-                this.forest.measure(this.ext, child_fork, child_fork.area);
+                this.ext.gnome_layout.measure(this.forest, child_fork, child_fork.area);
             } else {
                 Log.error(`toggle_orientation: Fork(${child_fork.id}) does not exist to have its orientation toggled`);
             }
         }
 
-        this.forest.arrange(this.ext);
+        this.ext.gnome_layout.arrange(this.forest);
 
         return Ok(void 0);
     }

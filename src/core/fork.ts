@@ -19,6 +19,9 @@ export interface WorkspaceList {
 
     /** The workspace that has this index now, if there is one */
     at(index: number): object | null;
+
+    /** The workspace that the user is on */
+    active(): object;
 }
 
 /** The links back up a tree, which its forks keep in step with their branches */
