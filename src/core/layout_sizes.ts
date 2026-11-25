@@ -1,3 +1,5 @@
+import { whole_rect, type Rect } from './geom.js';
+
 /** Pixels in one unit of the gap settings, at a scale of 1 */
 export const GAP_UNIT = 4;
 
@@ -30,6 +32,12 @@ export class LayoutSizes {
     /** The number of pixels around a monitor's work area */
     get gap_outer(): number {
         return this.gap_outer_setting * GAP_UNIT * this.scale_;
+    }
+
+    /** The part of a monitor's work area that its tree takes: all of it, less the outer gap */
+    outer_area(work_area: Rect): Rect {
+        const gap = this.gap_outer;
+        return whole_rect(work_area.x + gap, work_area.y + gap, work_area.width - gap * 2, work_area.height - gap * 2);
     }
 
     /** The width of a snap-to-grid column, in pixels */

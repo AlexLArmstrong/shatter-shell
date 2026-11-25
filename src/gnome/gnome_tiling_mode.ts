@@ -246,14 +246,7 @@ export class GnomeTilingMode {
 
         if (fork.is_root && fork.smart_gapped) {
             fork.smart_gapped = false;
-            const rect = this.ext.monitor_work_area(fork.monitor);
-
-            rect.x += this.ext.sizes.gap_outer;
-            rect.y += this.ext.sizes.gap_outer;
-            rect.width -= this.ext.sizes.gap_outer * 2;
-            rect.height -= this.ext.sizes.gap_outer * 2;
-
-            fork.set_area(rect);
+            fork.set_area(this.ext.sizes.outer_area(this.ext.monitor_work_area(fork.monitor)));
         }
 
         let orientation: Orientation, reverse: boolean;
@@ -329,14 +322,7 @@ export class GnomeTilingMode {
 
         if (fork.is_root && fork.smart_gapped) {
             fork.smart_gapped = false;
-            const rect = this.ext.monitor_work_area(fork.monitor);
-
-            rect.x += this.ext.sizes.gap_outer;
-            rect.y += this.ext.sizes.gap_outer;
-            rect.width -= this.ext.sizes.gap_outer * 2;
-            rect.height -= this.ext.sizes.gap_outer * 2;
-
-            fork.set_area(rect);
+            fork.set_area(this.ext.sizes.outer_area(this.ext.monitor_work_area(fork.monitor)));
         }
 
         const focused_id = focused.id;

@@ -14,6 +14,17 @@ function sizes_at(scale: number) {
 }
 
 describe('LayoutSizes', () => {
+    test('the outer area is the work area less the outer gap on every side', () => {
+        const sizes = sizes_at(2);
+        const gap = 3 * GAP_UNIT * 2;
+        assert.deepEqual(sizes.outer_area({ x: 100, y: 50, width: 1000, height: 500 }), {
+            x: 100 + gap,
+            y: 50 + gap,
+            width: 1000 - gap * 2,
+            height: 500 - gap * 2,
+        });
+    });
+
     test('gaps are in units of GAP_UNIT pixels', () => {
         const sizes = sizes_at(1);
         assert.equal(sizes.gap_inner, 2 * GAP_UNIT);

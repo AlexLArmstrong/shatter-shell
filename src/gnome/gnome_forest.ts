@@ -97,16 +97,11 @@ export class GnomeForest {
     }
 
     update_tree(fork: Fork, monitor: MonitorID, smart_gaps: boolean) {
-        const rect = this.ext.monitor_work_area(monitor);
+        const work_area = this.ext.monitor_work_area(monitor);
 
         fork.smart_gapped = smart_gaps && fork.right === null;
 
-        if (!fork.smart_gapped) {
-            rect.x += this.ext.sizes.gap_outer;
-            rect.y += this.ext.sizes.gap_outer;
-            rect.width -= this.ext.sizes.gap_outer * 2;
-            rect.height -= this.ext.sizes.gap_outer * 2;
-        }
+        const rect = fork.smart_gapped ? copy_rect(work_area) : this.ext.sizes.outer_area(work_area);
 
         const lone = fork.left.lone_window();
         if (lone !== null) {
@@ -116,24 +111,18 @@ export class GnomeForest {
             }
         }
 
-        fork.area = fork.set_area(rect.copy());
+        fork.area = fork.set_area(copy_rect(rect));
         fork.length_left = Math.round(fork.prev_ratio * fork.length());
         this.tile(fork, fork.area);
     }
 
     /** Attaches `win` to an optionally-given monitor */
     attach_to_monitor(win: MutterWindowHandle, workspace_id: MonitorWorkspaceID, smart_gaps: boolean) {
-        const rect = this.ext.monitor_work_area(workspace_id[0]);
-
-        if (!smart_gaps) {
-            rect.x += this.ext.sizes.gap_outer;
-            rect.y += this.ext.sizes.gap_outer;
-            rect.width -= this.ext.sizes.gap_outer * 2;
-            rect.height -= this.ext.sizes.gap_outer * 2;
-        }
+        const work_area = this.ext.monitor_work_area(workspace_id[0]);
+        const rect = smart_gaps ? copy_rect(work_area) : this.ext.sizes.outer_area(work_area);
 
         const on_primary = global.display.get_primary_monitor() === workspace_id[0];
-        const fork = this.forest.add_tree(win.id, rect.copy(), workspace_id, on_primary).root;
+        const fork = this.forest.add_tree(win.id, copy_rect(rect), workspace_id, on_primary).root;
         this.forest.on_attach(win.id);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
@@ -154,14 +143,7 @@ export class GnomeForest {
             const fork = attached;
             if (fork.is_root && fork.smart_gapped && fork.right) {
                 fork.smart_gapped = false;
-                const rect = this.ext.monitor_work_area(fork.monitor);
-
-                rect.x += this.ext.sizes.gap_outer;
-                rect.y += this.ext.sizes.gap_outer;
-                rect.width -= this.ext.sizes.gap_outer * 2;
-                rect.height -= this.ext.sizes.gap_outer * 2;
-
-                fork.set_area(rect);
+                fork.set_area(this.ext.sizes.outer_area(this.ext.monitor_work_area(fork.monitor)));
             }
 
             this.tile(fork, copy_rect(fork.area));

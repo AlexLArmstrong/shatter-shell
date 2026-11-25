@@ -232,14 +232,10 @@ export class GnomeGrab {
             }
         }
 
-        let empty_area = null;
-        if (at.largest_on_workspace(monitor, workspace) === null) {
-            empty_area = ext.monitor_work_area(monitor);
-            empty_area.x += ext.sizes.gap_outer;
-            empty_area.y += ext.sizes.gap_outer;
-            empty_area.width -= ext.sizes.gap_outer * 2;
-            empty_area.height -= ext.sizes.gap_outer * 2;
-        }
+        const empty_area =
+            at.largest_on_workspace(monitor, workspace) === null
+                ? ext.sizes.outer_area(ext.monitor_work_area(monitor))
+                : null;
 
         const target: Target | null = attach_to && {
             frame: attach_to.meta.get_frame_rect(),
