@@ -179,12 +179,12 @@ export class GnomeTilingMode {
         const new_fork = forest.create_fork(left, right, fork.area, fork.tree);
 
         if (is_left) {
-            fork.left = Node.Node.fork(new_fork[1]);
+            fork.left = Node.Node.fork(new_fork);
         } else {
-            fork.right = Node.Node.fork(new_fork[1]);
+            fork.right = Node.Node.fork(new_fork);
         }
 
-        return new_fork[1];
+        return new_fork;
     }
 
     move(
@@ -411,12 +411,11 @@ export class GnomeTilingMode {
         callback: (m: Mtk.Rectangle, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
     ) {
         if (this.ext.gnome_forest && this.window !== null) {
-            const entity = this.ext.gnome_forest.attached.get(this.window);
-            if (entity) {
-                const fork = this.ext.gnome_forest.forest.forks.get(entity);
+            const fork = this.ext.gnome_forest.attached.get(this.window);
+            if (fork) {
                 const window = this.ext.windows.get(this.window);
 
-                if (!fork || !window) return;
+                if (!window) return;
 
                 const workspace_id = this.ext.workspace_id(window);
 
@@ -439,14 +438,7 @@ export class GnomeTilingMode {
                 ) => {
                     if (func(toparea, crect, mov) || crect.equal(last)) return;
 
-                    this.ext.gnome_forest!.forest.resize(
-                        this.ext,
-                        entity,
-                        fork,
-                        this.window!,
-                        calculate(last, crect),
-                        crect,
-                    );
+                    this.ext.gnome_forest!.forest.resize(this.ext, fork, this.window!, calculate(last, crect), crect);
                     last = crect.copy();
                 };
 
@@ -550,26 +542,23 @@ export class GnomeTilingMode {
                     gnome_forest.attach_to_window(move_to, focused, placement, stack_from_left);
                     watching = focused;
                 } else {
-                    const parent = gnome_forest.windows_are_siblings(focused.entity, move_to.entity);
-                    if (parent) {
-                        const fork = gnome_forest.forest.forks.get(parent);
-                        if (fork) {
-                            if (!fork.right) {
-                                Log.error('move_auto: detected as sibling, but fork lacks right branch');
-                                return;
-                            }
+                    const fork = gnome_forest.windows_are_siblings(focused.entity, move_to.entity);
+                    if (fork) {
+                        if (!fork.right) {
+                            Log.error('move_auto: detected as sibling, but fork lacks right branch');
+                            return;
+                        }
 
-                            if (fork.left.is_leaf() && fork.left.inner.tabbed) {
-                                Node.stack_remove(this.ext, fork.left.inner, focused.entity);
-                            } else {
-                                const temp = fork.right;
+                        if (fork.left.is_leaf() && fork.left.inner.tabbed) {
+                            Node.stack_remove(this.ext, fork.left.inner, focused.entity);
+                        } else {
+                            const temp = fork.right;
 
-                                fork.right = fork.left;
-                                fork.left = temp;
+                            fork.right = fork.left;
+                            fork.left = temp;
 
-                                gnome_forest.tile(fork, fork.area);
-                                watching = focused;
-                            }
+                            gnome_forest.tile(fork, fork.area);
+                            watching = focused;
                         }
                     }
 

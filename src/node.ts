@@ -1,11 +1,9 @@
 import Mtk from 'gi://Mtk';
 
-import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Fork } from './fork.js';
 
-import * as Ecs from './ecs.js';
 import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
 /**
@@ -210,7 +208,7 @@ export class Node<T extends NodeADT = NodeADT> {
         let fmt = `Node{\n    kind: ${node_kind_as_string(this.inner.kind)},\n`;
         switch (this.inner.kind) {
             case NodeKind.FORK:
-                fmt += `    entity: (${this.inner.fork.entity})\n  }`;
+                fmt += `    fork: (${this.inner.fork.id})\n  }`;
                 break;
             case NodeKind.STACK:
                 fmt += `    tabbed: ${this.inner.tabbed}, entities: ${this.inner.entities}\n  }`;
@@ -235,8 +233,8 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Asks if this fork is the fork we are looking for */
-    is_fork(entity: Entity): boolean {
-        return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.fork.entity, entity);
+    is_fork(fork: Fork): boolean {
+        return this.inner.kind === NodeKind.FORK && this.inner.fork === fork;
     }
 
     /** Whether this is a leaf without tabs, which holds only this window */
@@ -253,9 +251,9 @@ export class Node<T extends NodeADT = NodeADT> {
     measure(
         tiler: Forest,
         ext: Ext,
-        parent: Entity,
+        parent: Fork,
         area: Mtk.Rectangle,
-        record: (win: WindowId, parent: Entity, area: Mtk.Rectangle) => void,
+        record: (win: WindowId, parent: Fork, area: Mtk.Rectangle) => void,
     ) {
         switch (this.inner.kind) {
             case NodeKind.FORK:

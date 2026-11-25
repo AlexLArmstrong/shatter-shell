@@ -2,7 +2,6 @@ import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Mtk from 'gi://Mtk';
 
-import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Node, NodeLeaf } from './node.js';
@@ -60,6 +59,8 @@ export class Tree {
     }
 }
 
+let next_fork_id = 1;
+
 /**
  * A tiling fork contains two children nodes, which may either be leaves or sub-forks.
  *
@@ -74,10 +75,13 @@ export class Fork {
     parent: Fork | null = null;
 
     area: Mtk.Rectangle;
-    entity: Entity;
+
+    /** A number that tells forks apart in logs */
+    readonly id: number = next_fork_id++;
+
     /**
-     * Whether the fork has left the tree, and its entity been deleted. A node of the tree that still
-     * links to it is out of date, so walks of the tree skip it, as they did when they looked it up.
+     * Whether the fork has left the tree. A node of the tree that still links to it is out of date,
+     * so walks of the tree skip it.
      */
     detached: boolean = false;
     /** The tree that the fork is in, which all of its forks share */
@@ -97,7 +101,6 @@ export class Fork {
 
     constructor(
         private readonly links: TreeLinks,
-        entity: Entity,
         left: Node,
         right: Node | null,
         area: Mtk.Rectangle,
@@ -112,7 +115,6 @@ export class Fork {
         this.tree = tree;
         this.length_left = orientation === Clutter.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
         this.prev_length_left = this.length_left;
-        this.entity = entity;
         this.orientation = orientation;
     }
 
@@ -293,7 +295,7 @@ export class Fork {
         tiler: Forest,
         ext: Ext,
         area: Mtk.Rectangle,
-        record: (win: WindowId, parent: Entity, area: Mtk.Rectangle) => void,
+        record: (win: WindowId, parent: Fork, area: Mtk.Rectangle) => void,
     ) {
         let ratio = null;
 
@@ -353,14 +355,14 @@ export class Fork {
 
             region[l] = length - ext.sizes.gap_inner_half;
 
-            this.left.measure(tiler, ext, this.entity, region, record);
+            this.left.measure(tiler, ext, this, region, record);
 
             region[p] = region[p] + length + ext.sizes.gap_inner_half;
             region[l] = this.area[l] - length - ext.sizes.gap_inner_half;
 
-            this.right.measure(tiler, ext, this.entity, region, record);
+            this.right.measure(tiler, ext, this, region, record);
         } else {
-            this.left.measure(tiler, ext, this.entity, this.area, record);
+            this.left.measure(tiler, ext, this, this.area, record);
         }
     }
 
@@ -374,7 +376,7 @@ export class Fork {
 
             const blocked = [];
 
-            for (const child of forest.iter(this.entity)) {
+            for (const child of forest.iter(this)) {
                 switch (child.inner.kind) {
                     case NodeKind.FORK:
                         // Its monitor and workspace are the tree's, which have already changed

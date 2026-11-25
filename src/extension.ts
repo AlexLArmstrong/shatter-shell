@@ -1,7 +1,7 @@
 import { Extension, InjectionManager } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import type { ExtEvent } from './events.js';
-import type { Tree } from './fork.js';
+import type { Fork, Tree } from './fork.js';
 import type { GnomeForest } from './gnome/gnome_forest.js';
 import type { Indicator } from './panel_settings.js';
 
@@ -559,14 +559,11 @@ export class Ext extends Ecs.System<ExtEvent> {
         window.tilable_signals = [];
 
         if (this.gnome_forest) {
-            const entity = this.gnome_forest.attached.get(win);
-            if (entity) {
-                const fork = this.gnome_forest.forest.forks.get(entity);
-                if (fork?.right && fork.right.is_window(win)) {
-                    const entity = fork.right.inner.entities[0]!;
+            const fork = this.gnome_forest.attached.get(win);
+            if (fork?.right && fork.right.is_window(win)) {
+                const entity = fork.right.inner.entities[0]!;
 
-                    this.windows.get(entity)?.request_activate();
-                }
+                this.windows.get(entity)?.request_activate();
             }
         }
 
@@ -667,7 +664,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 + `  stack: ${win.stack},\n`;
 
             if (this.gnome_forest) {
-                msg += `  fork: (${this.gnome_forest.attached.get(win.entity)}),\n`;
+                msg += `  fork: (${this.gnome_forest.attached.get(win.entity)?.id}),\n`;
             }
 
             Log.debug(msg + '}');
@@ -754,11 +751,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             // Retile on unmaximize after waiting for other events to complete, such as animations
             this.register_fn(() => {
                 if (this.gnome_forest) {
-                    const fork_ent = this.gnome_forest.attached.get(win.entity);
-                    if (fork_ent) {
-                        const fork = this.gnome_forest.forest.forks.get(fork_ent);
-                        if (fork) this.gnome_forest.tile(fork, fork.area);
-                    }
+                    const fork = this.gnome_forest.attached.get(win.entity);
+                    if (fork) this.gnome_forest.tile(fork, fork.area);
                 }
             });
         }
@@ -776,10 +770,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         if (this.gnome_forest) {
             if (win.meta.minimized) {
-                const attached = this.gnome_forest.attached.get(win.entity);
-                if (!attached) return;
-
-                const fork = this.gnome_forest.forest.forks.get(attached);
+                const fork = this.gnome_forest.attached.get(win.entity);
                 if (!fork) return;
 
                 let attachment: boolean | number;
@@ -789,17 +780,17 @@ export class Ext extends Ecs.System<ExtEvent> {
                     attachment = fork.left.is_window(win.entity);
                 }
 
-                win.was_attached_to = [attached, attachment];
+                win.was_attached_to = [fork, attachment];
                 this.gnome_forest.detach_window(win.entity);
             } else if (!win.floating) {
                 if (win.was_attached_to) {
-                    const [entity, attachment] = win.was_attached_to;
+                    const [fork, attachment] = win.was_attached_to;
                     delete win.was_attached_to;
 
                     const gnome_forest = this.gnome_forest;
 
-                    const fork = gnome_forest.forest.forks.get(entity);
-                    if (fork) {
+                    // The fork may have left the tree while the window was minimized
+                    if (!fork.detached) {
                         if (typeof attachment === 'boolean') {
                             gnome_forest.forest.attach_fork(this, fork, win.entity, attachment);
                             gnome_forest.tile(fork, fork.area);
@@ -1344,7 +1335,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             );
         };
 
-        function mark_for_reassignment(ext: Ext, fork: Ecs.Entity) {
+        function mark_for_reassignment(ext: Ext, fork: Fork) {
             for (const leaf of forest.iter(fork)) {
                 if (!leaf.is_leaf()) continue;
 
@@ -1414,7 +1405,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                 for (const migration of migrations) {
                     if (migration.moved) migration.tree.root.workspace = 0;
-                    mark_for_reassignment(this, migration.tree.root.entity);
+                    mark_for_reassignment(this, migration.tree.root);
                 }
 
                 apply_migrations(migrations, unchanged_monitors(changes));

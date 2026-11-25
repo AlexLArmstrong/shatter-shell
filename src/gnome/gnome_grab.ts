@@ -148,18 +148,13 @@ export class GnomeGrab {
         const at = ext.gnome_forest;
         if (!at) return;
 
-        const fork_entity = at.attached.get(win.entity);
-        if (!fork_entity) {
-            Log.error(`no fork entity found`);
+        const fork = at.attached.get(win.entity);
+        if (!fork) {
+            Log.error(`no fork found`);
             return;
         }
 
         const forest = at.forest;
-        const fork = forest.forks.get(fork_entity);
-        if (!fork) {
-            Log.error(`no fork component found`);
-            return;
-        }
 
         const crect = win.frame();
         if (win.stack != null) {
@@ -175,7 +170,7 @@ export class GnomeGrab {
 
         const neighbour_rect = (side: EdgeSide) => ext.focus_selector.toward(ext, side, win)?.frame() ?? null;
         if (movement_is_valid(movement, win.frame(), neighbour_rect)) {
-            forest.resize(ext, fork_entity, fork, win.entity, movement, crect);
+            forest.resize(ext, fork, win.entity, movement, crect);
             forest.arrange(ext);
         } else {
             forest.tile(ext, fork, fork.area);

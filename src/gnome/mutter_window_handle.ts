@@ -1,6 +1,6 @@
 import type { WindowHandle } from '../core/window_handle.js';
-import type { Entity } from '../ecs.js';
 import type { Ext } from '../extension.js';
+import type { Fork } from '../fork.js';
 
 import * as Events from '../events.js';
 import * as focus from '../focus.js';
@@ -67,7 +67,7 @@ export class MutterWindowHandle implements WindowHandle {
 
     /** Set while changes to this window's size are ignored, such as while it's being moved */
     blocked: boolean = false;
-    was_attached_to?: [Entity, boolean | number];
+    was_attached_to?: [Fork, boolean | number];
     destroying: boolean = false;
 
     // Awaiting reassignment after a display update
