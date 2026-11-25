@@ -82,9 +82,9 @@ export class GnomeForest {
             }
         }
 
-        const a_fn = a_fork.replace_window(this.ext.tab_bars, a_win, b_win);
+        const a_fn = a_fork.replace_window(this.ext.tab_bars, a_win.id, b_win.id);
 
-        const b_fn = b_fork.replace_window(this.ext.tab_bars, b_win, a_win);
+        const b_fn = b_fork.replace_window(this.ext.tab_bars, b_win.id, a_win.id);
 
         if (a_fn) a_fn();
         if (b_fn) b_fn();

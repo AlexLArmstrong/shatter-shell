@@ -1,12 +1,9 @@
-import Meta from 'gi://Meta';
-
 import type { LayoutSizes } from './core/layout_sizes.js';
 import type { Layout, Node, NodeLeaf, TabBars } from './node.js';
 
 import { copy_rect, whole_rect, type Rect } from './core/geom.js';
+import { workspaceID } from './core/ids.js';
 import { Orientation } from './core/orientation.js';
-import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
-import { workspaceID } from './lib.js';
 import * as node from './node.js';
 const { NodeKind } = node;
 
@@ -14,6 +11,15 @@ const XPOS = 'x' as const;
 const YPOS = 'y' as const;
 const WIDTH = 'width' as const;
 const HEIGHT = 'height' as const;
+
+/** The workspaces as the display server has them now */
+export interface WorkspaceList {
+    /** The index that `workspace` has now, or -1 if it has been removed */
+    index_of(workspace: object): number;
+
+    /** The workspace that has this index now, if there is one */
+    at(index: number): object | null;
+}
 
 /** The links back up a tree, which its forks keep in step with their branches */
 export interface TreeLinks {
@@ -32,28 +38,35 @@ export class Tree {
      * The workspace that the tree is on, which it keeps when the workspaces are renumbered. It's
      * only compared, never asked anything.
      */
-    workspace: Meta.Workspace;
-
-    /** Set once mutter has removed the workspace, which then has no index, until the tree moves on */
-    workspace_removed = false;
+    workspace: object;
 
     on_primary_display: boolean;
 
-    constructor(monitor: MonitorID, workspace: Meta.Workspace) {
+    constructor(
+        monitor: MonitorID,
+        workspace: object,
+        on_primary_display: boolean,
+        private readonly workspaces: WorkspaceList,
+    ) {
         this.monitor = monitor;
         this.workspace = workspace;
-        this.on_primary_display = global.display.get_primary_monitor() === monitor;
+        this.on_primary_display = on_primary_display;
     }
 
-    /** Moves the tree to another workspace */
-    move_to(workspace: Meta.Workspace) {
-        this.workspace = workspace;
-        this.workspace_removed = false;
+    /** The index of the tree's workspace now, or -1 if it has been removed */
+    index(): number {
+        return this.workspaces.index_of(this.workspace);
+    }
+
+    /** Moves the tree to the workspace that has this index now, if there is one */
+    move_to(workspace: WorkspaceID) {
+        const found = this.workspaces.at(workspace);
+        if (found) this.workspace = found;
     }
 
     /** Whether the tree is on this workspace, given by its index as it is now */
     is_on(workspace: WorkspaceID): boolean {
-        return global.workspace_manager.get_workspace_by_index(workspace) === this.workspace;
+        return this.workspaces.at(workspace) === this.workspace;
     }
 }
 
@@ -122,13 +135,12 @@ export class Fork {
 
     /** The index of the tree's workspace as it is now, or -1 if it has been removed */
     get workspace(): WorkspaceID {
-        return workspaceID(this.tree.workspace_removed ? -1 : this.tree.workspace.index());
+        return workspaceID(this.tree.index());
     }
 
     /** Moves the tree to the workspace that has this index now */
     set workspace(workspace: WorkspaceID) {
-        const found = global.workspace_manager.get_workspace_by_index(workspace);
-        if (found) this.tree.move_to(found);
+        this.tree.move_to(workspace);
     }
 
     get monitor(): MonitorID {
@@ -262,12 +274,12 @@ export class Fork {
     }
 
     /** Replaces the association of a window in a fork with another */
-    replace_window(tabs: TabBars, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
-        const branch = this.left.has(a.id) ? this.left : this.right?.has(a.id) ? this.right : null;
+    replace_window(tabs: TabBars, a: WindowId, b: WindowId): (() => void) | null {
+        const branch = this.left.has(a) ? this.left : this.right?.has(a) ? this.right : null;
         if (!branch?.is_leaf()) return null;
 
         const leaf = branch.inner;
-        return () => node.stack_replace(tabs, leaf, a.id, b.id);
+        return () => node.stack_replace(tabs, leaf, a, b);
     }
 
     /** Sets a new area for this fork */

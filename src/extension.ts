@@ -913,7 +913,6 @@ export class Ext {
 
     /** Restacks after mutter removes a workspace, and forgets the windows that are gone */
     on_workspace_removed(_number: number) {
-        this.gnome_forest?.forest.note_removed_workspaces();
         this.restack();
 
         // Fix phantom apps in dash

@@ -5,6 +5,7 @@ import type { ExtensionSettings } from '../settings.js';
 
 import { Forest } from '../forest.js';
 import { GnomeForest } from './gnome_forest.js';
+import { MutterWorkspaces } from './mutter_workspaces.js';
 
 /** Switches auto-tiling on and off, keeping the setting and GNOME's edge tiling in step */
 export class GnomeAutoTiling {
@@ -18,7 +19,7 @@ export class GnomeAutoTiling {
         const { ext } = this;
         return new GnomeForest(
             ext,
-            new Forest()
+            new Forest(new MutterWorkspaces())
                 .connect_on_attach(ext.on_tile_attach.bind(ext))
                 .connect_on_detach(ext.on_tile_detach.bind(ext)),
         );

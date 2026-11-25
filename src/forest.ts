@@ -51,6 +51,8 @@ interface Request {
  * arrangement.
  */
 export class Forest implements Fork.TreeLinks {
+    constructor(private readonly workspaces: Fork.WorkspaceList) {}
+
     private readonly trees_ = new Set<Fork.Tree>();
 
     /** Stores window positions that have been requested. */
@@ -340,7 +342,8 @@ export class Forest implements Fork.TreeLinks {
     add_tree(window: WindowId, area: Rect, id: MonitorWorkspaceID): Fork.Tree {
         const manager = global.workspace_manager;
         const workspace = manager.get_workspace_by_index(id[1]) ?? manager.get_active_workspace();
-        const tree = new Fork.Tree(id[0], workspace);
+        const on_primary = global.display.get_primary_monitor() === id[0];
+        const tree = new Fork.Tree(id[0], workspace, on_primary, this.workspaces);
         tree.root = this.create_fork(Node.Node.window(window), null, area, tree);
         this.trees_.add(tree);
 
@@ -435,23 +438,6 @@ export class Forest implements Fork.TreeLinks {
 
     trees(): Iterable<Fork.Tree> {
         return this.trees_;
-    }
-
-    /**
-     * Marks the trees whose workspace mutter has just removed, as it no longer has an index. Call this
-     * once a workspace is removed.
-     */
-    note_removed_workspaces() {
-        const manager = global.workspace_manager;
-        const present = new Set<Meta.Workspace>();
-        for (let idx = 0; idx < manager.get_n_workspaces(); idx += 1) {
-            const workspace = manager.get_workspace_by_index(idx);
-            if (workspace) present.add(workspace);
-        }
-
-        for (const tree of this.trees_) {
-            if (!present.has(tree.workspace)) tree.workspace_removed = true;
-        }
     }
 
     /** Finds the tree on a monitor and workspace */
