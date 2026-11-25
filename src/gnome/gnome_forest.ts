@@ -82,9 +82,9 @@ export class GnomeForest {
             }
         }
 
-        const a_fn = a_fork.replace_window(this.ext, a_win, b_win);
+        const a_fn = a_fork.replace_window(this.ext.tab_bars, a_win, b_win);
 
-        const b_fn = b_fork.replace_window(this.ext, b_win, a_win);
+        const b_fn = b_fork.replace_window(this.ext.tab_bars, b_win, a_win);
 
         if (a_fn) a_fn();
         if (b_fn) b_fn();
@@ -526,21 +526,21 @@ export class GnomeForest {
     unstack(fork: Fork, win: MutterWindowHandle, toggled: boolean = false) {
         if (toggled && fork.left.is_window(win.id)) {
             this.add_tabs(fork, fork.left);
-            fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+            fork.measure(this.forest.layout(this.ext), fork.area);
         } else if (fork.left.is_in_stack(win.id)) {
             // Only a stack of one window loses its tabs
             if (fork.left.inner.windows.length === 1) {
                 this.remove_tabs(fork.left);
-                fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+                fork.measure(this.forest.layout(this.ext), fork.area);
                 if (!fork.right) this.forest.reassign_to_parent(fork, fork.left);
             }
         } else if (toggled && fork.right && fork.right.is_window(win.id)) {
             this.add_tabs(fork, fork.right);
-            fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+            fork.measure(this.forest.layout(this.ext), fork.area);
         } else if (fork.right && fork.right.is_in_stack(win.id)) {
             if (fork.right.inner.windows.length === 1) {
                 this.remove_tabs(fork.right);
-                fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+                fork.measure(this.forest.layout(this.ext), fork.area);
             }
         }
 
@@ -572,7 +572,7 @@ export class GnomeForest {
         if (!leaf) return;
 
         this.add_tabs(fork, leaf);
-        fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+        fork.measure(this.forest.layout(this.ext), fork.area);
     }
 
     /** Draws a stack again from the tree, and places its tab bar if it has been measured */

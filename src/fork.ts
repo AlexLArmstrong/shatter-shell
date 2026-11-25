@@ -1,15 +1,13 @@
 import Meta from 'gi://Meta';
 
-import type { Ext } from './extension.js';
-import type { Forest } from './forest.js';
-import type { Node, NodeLeaf } from './node.js';
+import type { LayoutSizes } from './core/layout_sizes.js';
+import type { Layout, Node, NodeLeaf, TabBars } from './node.js';
 
 import { copy_rect, whole_rect, type Rect } from './core/geom.js';
 import { Orientation } from './core/orientation.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import { workspaceID } from './lib.js';
 import * as node from './node.js';
-import { TAB_HEIGHT_UNSCALED } from './stack.js';
 const { NodeKind } = node;
 
 const XPOS = 'x' as const;
@@ -218,25 +216,25 @@ export class Fork {
     }
 
     /** The calculated left area of this fork */
-    area_of_left(ext: Ext): Rect {
+    area_of_left(sizes: LayoutSizes): Rect {
         let { x, y, width, height } = this.area;
         if (this.is_horizontal()) {
-            width = this.length_left - ext.sizes.gap_inner_half;
+            width = this.length_left - sizes.gap_inner_half;
         } else {
-            height = this.length_left - ext.sizes.gap_inner_half;
+            height = this.length_left - sizes.gap_inner_half;
         }
         return whole_rect(x, y, width, height);
     }
 
     /** The calculated right area of this fork */
-    area_of_right(ext: Ext): Rect {
+    area_of_right(sizes: LayoutSizes): Rect {
         let { x, y, width, height } = this.area;
         if (this.is_horizontal()) {
-            x = x + this.length_left + ext.sizes.gap_inner_half;
-            width = width - this.length_left - ext.sizes.gap_inner_half;
+            x = x + this.length_left + sizes.gap_inner_half;
+            width = width - this.length_left - sizes.gap_inner_half;
         } else {
-            y = y + this.length_left + ext.sizes.gap_inner_half;
-            height = height - this.length_left - ext.sizes.gap_inner_half;
+            y = y + this.length_left + sizes.gap_inner_half;
+            height = height - this.length_left - sizes.gap_inner_half;
         }
         return whole_rect(x, y, width, height);
     }
@@ -264,12 +262,12 @@ export class Fork {
     }
 
     /** Replaces the association of a window in a fork with another */
-    replace_window(ext: Ext, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
+    replace_window(tabs: TabBars, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
         const branch = this.left.has(a.id) ? this.left : this.right?.has(a.id) ? this.right : null;
         if (!branch?.is_leaf()) return null;
 
         const leaf = branch.inner;
-        return () => node.stack_replace(ext, leaf, a.id, b.id);
+        return () => node.stack_replace(tabs, leaf, a.id, b.id);
     }
 
     /** Sets a new area for this fork */
@@ -291,10 +289,10 @@ export class Fork {
     }
 
     /** Calculates the future arrangement of windows in this fork */
-    measure(tiler: Forest, ext: Ext, area: Rect, record: (win: WindowId, parent: Fork, area: Rect) => void) {
+    measure(layout: Layout, area: Rect) {
         let ratio = null;
 
-        const manually_moved = ext.grab.window !== null || ext.gnome_tiling_mode.resizing_window;
+        const manually_moved = layout.manually_moved();
 
         if (!this.is_root) {
             if (this.orientation_changed) {
@@ -333,10 +331,10 @@ export class Fork {
                 if (length == 0) length = 32;
             }
 
-            const gap = ext.sizes.gap_inner_half;
-            const left_size = minimum_size(tiler, ext, this.left);
+            const gap = layout.gap_inner_half;
+            const left_size = minimum_size(layout, this.left);
             const left_min = left_size[this.is_horizontal() ? 0 : 1];
-            const right_size = minimum_size(tiler, ext, this.right);
+            const right_size = minimum_size(layout, this.right);
             const right_min = right_size[this.is_horizontal() ? 0 : 1];
             const lower_bound = left_min + gap;
             const upper_bound = this.area[l] - right_min - gap;
@@ -348,60 +346,16 @@ export class Fork {
                 }
             }
 
-            region[l] = Math.trunc(length - ext.sizes.gap_inner_half);
+            region[l] = Math.trunc(length - layout.gap_inner_half);
 
-            this.left.measure(tiler, ext, this, region, record);
+            this.left.measure(layout, this, region);
 
-            region[p] = Math.trunc(region[p] + length + ext.sizes.gap_inner_half);
-            region[l] = Math.trunc(this.area[l] - length - ext.sizes.gap_inner_half);
+            region[p] = Math.trunc(region[p] + length + layout.gap_inner_half);
+            region[l] = Math.trunc(this.area[l] - length - layout.gap_inner_half);
 
-            this.right.measure(tiler, ext, this, region, record);
+            this.right.measure(layout, this, region);
         } else {
-            this.left.measure(tiler, ext, this, this.area, record);
-        }
-    }
-
-    migrate(ext: Ext, forest: Forest, area: Rect, monitor: MonitorID, workspace: WorkspaceID) {
-        if (ext.gnome_forest && this.is_root) {
-            const primary = global.display.get_primary_monitor() === monitor;
-
-            this.monitor = monitor;
-            this.workspace = workspace;
-            this.on_primary_display = primary;
-
-            const blocked = [];
-
-            for (const child of forest.iter(this)) {
-                switch (child.inner.kind) {
-                    case NodeKind.FORK:
-                        // Its monitor and workspace are the tree's, which have already changed
-                        break;
-                    case NodeKind.STACK:
-                        for (const window_id of child.inner.windows) {
-                            const window = ext.windows.get(window_id);
-
-                            if (window) {
-                                ext.size_signals_block(window);
-                                window.reassignment = false;
-                                window.meta.change_workspace_by_index(workspace, true);
-                                blocked.push(window);
-                            }
-                        }
-                }
-            }
-
-            area.x = Math.trunc(area.x + ext.sizes.gap_outer);
-            area.y = Math.trunc(area.y + ext.sizes.gap_outer);
-            area.width = Math.trunc(area.width - ext.sizes.gap_outer * 2);
-            area.height = Math.trunc(area.height - ext.sizes.gap_outer * 2);
-
-            this.set_area(copy_rect(area));
-            this.measure(forest, ext, area, forest.on_record());
-            forest.arrange(ext);
-
-            for (const window of blocked) {
-                ext.size_signals_unblock(window);
-            }
+            this.left.measure(layout, this, this.area);
         }
     }
 
@@ -443,44 +397,40 @@ export class Fork {
     }
 }
 
-function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
+function minimum_size(layout: Layout, branch: Node): [number, number] {
     switch (branch.inner.kind) {
         case NodeKind.STACK:
             // A leaf without tabs is a window on its own
-            if (!branch.inner.tabbed) return window_minimum_size(ext, branch.inner.windows[0]!);
-            return stack_minimum_size(ext, branch.inner.windows);
+            if (!branch.inner.tabbed) return layout.minimum_size(branch.inner.windows[0]!);
+            return stack_minimum_size(layout, branch.inner.windows);
         case NodeKind.FORK:
-            return fork_minimum_size(ext, tiler, branch.inner.fork);
+            return fork_minimum_size(layout, branch.inner.fork);
     }
-}
-
-function window_minimum_size(ext: Ext, window_id: WindowId): [number, number] {
-    return ext.windows.get(window_id)?.minimum_size() ?? [0, 0];
 }
 
 /** Gets the stack's minimum size based on its windows and the tab bar. */
-function stack_minimum_size(ext: Ext, windows: WindowId[]): [number, number] {
+function stack_minimum_size(layout: Layout, windows: WindowId[]): [number, number] {
     let width = 0;
     let height = 0;
     for (const window_id of windows) {
-        const [window_width, window_height] = window_minimum_size(ext, window_id);
+        const [window_width, window_height] = layout.minimum_size(window_id);
         width = Math.max(width, window_width);
         height = Math.max(height, window_height);
     }
-    return [width, height + ext.sizes.scale * TAB_HEIGHT_UNSCALED];
+    return [width, height + layout.tab_height()];
 }
 
 /** Gets the fork's minimum size based on its left and right nodes. */
-function fork_minimum_size(ext: Ext, tiler: Forest, fork: Fork): [number, number] {
+function fork_minimum_size(layout: Layout, fork: Fork): [number, number] {
     if (fork.detached) return [0, 0];
 
-    const [left_width, left_height] = minimum_size(tiler, ext, fork.left);
+    const [left_width, left_height] = minimum_size(layout, fork.left);
     if (!fork.right) return [left_width, left_height];
 
-    const [right_width, right_height] = minimum_size(tiler, ext, fork.right);
+    const [right_width, right_height] = minimum_size(layout, fork.right);
     if (fork.is_horizontal()) {
-        return [left_width + right_width + ext.sizes.gap_inner, Math.max(left_height, right_height)];
+        return [left_width + right_width + layout.gap_inner, Math.max(left_height, right_height)];
     } else {
-        return [Math.max(left_width, right_width), left_height + right_height + ext.sizes.gap_inner];
+        return [Math.max(left_width, right_width), left_height + right_height + layout.gap_inner];
     }
 }

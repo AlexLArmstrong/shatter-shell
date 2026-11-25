@@ -4,6 +4,7 @@ import type { Rect } from './core/geom.js';
 import type { ExtEvent } from './events.js';
 import type { Fork, Tree } from './fork.js';
 import type { GnomeForest } from './gnome/gnome_forest.js';
+import type { TabBars } from './node.js';
 import type { Indicator } from './panel_settings.js';
 
 import * as Config from './config.js';
@@ -135,6 +136,11 @@ export class Ext {
     private size_requests: Map<GObject.Object, SignalID> = new Map();
 
     readonly window_animations = new WindowAnimationController(this.signals);
+
+    /** Draws the tab bars of the tree's tabbed leaves again */
+    readonly tab_bars: TabBars = {
+        update: leaf => this.gnome_forest?.update_stack(leaf),
+    };
 
     /** The movements that have been queued for windows */
     movements: Map<WindowId, Rect> = new Map();
@@ -810,7 +816,7 @@ export class Ext {
                                     const stack_node: node.NodeStack = stack_info[1].inner;
 
                                     gnome_forest.forest.on_attach(win.id);
-                                    node.stack_insert(this, stack_node, win.id, true);
+                                    node.stack_insert(this.tab_bars, stack_node, win.id, true);
                                     stack.activate(win.id);
                                     gnome_forest.tile(fork, fork.area);
                                     return;
@@ -1330,7 +1336,7 @@ export class Ext {
                         ? workspace_on(monitor, claimed, monitor => this.find_unused_workspace(monitor)[0])
                         : fork.workspace;
 
-                    fork.migrate(this, forest, work_area, monitor, workspace);
+                    forest.migrate(this, fork, work_area, monitor, workspace);
                     fork.set_ratio(fork.length() / 2);
 
                     return true;

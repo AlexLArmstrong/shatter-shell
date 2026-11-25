@@ -288,7 +288,7 @@ export class Stack {
 
     /** Shows this window of the stack, by changing the leaf */
     activate(window_id: WindowId) {
-        Node.stack_activate(this.ext, this.node, window_id);
+        Node.stack_activate(this.ext.tab_bars, this.node, window_id);
     }
 
     /**

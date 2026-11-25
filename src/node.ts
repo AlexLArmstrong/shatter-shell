@@ -1,9 +1,6 @@
-import type { Ext } from './extension.js';
-import type { Forest } from './forest.js';
 import type { Fork } from './fork.js';
 
 import { copy_rect, type Rect } from './core/geom.js';
-import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
 /**
  * A node is either a fork, or a stack of windows, which is every leaf of the tree. A window on its own
@@ -59,9 +56,38 @@ export type NodeLeaf = NodeStack;
  * below, which draw the stack again before they return.
  */
 
+/** Draws the tab bars of leaves again from the tree */
+export interface TabBars {
+    update(leaf: NodeStack): void;
+}
+
+/** What laying out a tree needs from outside of it, and where its results go */
+export interface Layout {
+    /** The gap between windows, in pixels */
+    readonly gap_inner: number;
+
+    /** Half of the gap between windows, in pixels */
+    readonly gap_inner_half: number;
+
+    /** The height that a tabbed leaf keeps for its tab bar, in pixels */
+    tab_height(): number;
+
+    /** Whether the user is moving or resizing a window right now, which keeps the forks' ratios */
+    manually_moved(): boolean;
+
+    /** The smallest width and height that a window can have */
+    minimum_size(window: WindowId): [number, number];
+
+    /** Says where a window of the fork `parent` goes */
+    place(window: WindowId, parent: Fork, rect: Rect): void;
+
+    /** Says that the tab bar of a tabbed leaf of `parent` needs placing again */
+    restack(leaf: NodeStack, parent: Fork): void;
+}
+
 /** Draws the stack again from the tree */
-function sync_tabs(ext: Ext, node: NodeStack) {
-    ext.gnome_forest?.update_stack(node);
+function sync_tabs(tabs: TabBars, node: NodeStack) {
+    tabs.update(node);
 }
 
 export function stack_find(node: NodeStack, window_id: WindowId) {
@@ -70,7 +96,7 @@ export function stack_find(node: NodeStack, window_id: WindowId) {
 }
 
 /** Shows this window of the stack, and remembers the one that was shown before */
-export function stack_activate(ext: Ext, node: NodeStack, window_id: WindowId) {
+export function stack_activate(tabs: TabBars, node: NodeStack, window_id: WindowId) {
     if (stack_find(node, window_id) === null) return;
 
     if (node.active !== window_id) {
@@ -78,11 +104,11 @@ export function stack_activate(ext: Ext, node: NodeStack, window_id: WindowId) {
         node.active = window_id;
     }
 
-    sync_tabs(ext, node);
+    sync_tabs(tabs, node);
 }
 
 /** Adds a window at either end of a stack, behind its active window */
-export function stack_insert(ext: Ext, node: NodeStack, window_id: WindowId, at_end: boolean) {
+export function stack_insert(tabs: TabBars, node: NodeStack, window_id: WindowId, at_end: boolean) {
     if (at_end) {
         node.windows.push(window_id);
     } else {
@@ -90,14 +116,14 @@ export function stack_insert(ext: Ext, node: NodeStack, window_id: WindowId, at_
     }
     node.parent?.hold_window(node, window_id);
 
-    sync_tabs(ext, node);
+    sync_tabs(tabs, node);
 }
 
 /**
  * Removes a window from a stack, returning where it was. If it was the active one, the previously
  * active window takes over if it's still there, and otherwise the one that is now in its place.
  */
-export function stack_remove(ext: Ext, node: NodeStack, window_id: WindowId): number | null {
+export function stack_remove(tabs: TabBars, node: NodeStack, window_id: WindowId): number | null {
     const idx = stack_find(node, window_id);
     if (idx === null) return null;
 
@@ -112,7 +138,7 @@ export function stack_remove(ext: Ext, node: NodeStack, window_id: WindowId): nu
         node.prev_active = null;
     }
 
-    sync_tabs(ext, node);
+    sync_tabs(tabs, node);
     return idx;
 }
 
@@ -120,7 +146,7 @@ export function stack_remove(ext: Ext, node: NodeStack, window_id: WindowId): nu
  * Puts another window in the place of one in a stack, such as when swapping windows, and makes it
  * active if that one was
  */
-export function stack_replace(ext: Ext, node: NodeStack, old: WindowId, window_id: WindowId) {
+export function stack_replace(tabs: TabBars, node: NodeStack, old: WindowId, window_id: WindowId) {
     const idx = stack_find(node, old);
     if (idx === null) return;
 
@@ -131,44 +157,44 @@ export function stack_replace(ext: Ext, node: NodeStack, old: WindowId, window_i
     if (node.active === old) node.active = window_id;
     if (node.prev_active === old) node.prev_active = window_id;
 
-    sync_tabs(ext, node);
+    sync_tabs(tabs, node);
 }
 
-function stack_swap(ext: Ext, node: NodeStack, from: number, to: number) {
+function stack_swap(tabs: TabBars, node: NodeStack, from: number, to: number) {
     const a = node.windows[from];
     const b = node.windows[to];
     if (a === undefined || b === undefined) return;
 
     node.windows[from] = b;
     node.windows[to] = a;
-    sync_tabs(ext, node);
+    sync_tabs(tabs, node);
 }
 
 /** Move the window in a stack to the left, and detach if it it as the end. */
-export function stack_move_left(ext: Ext, node: NodeStack, window_id: WindowId): boolean {
+export function stack_move_left(tabs: TabBars, node: NodeStack, window_id: WindowId): boolean {
     const idx = stack_find(node, window_id);
     if (idx === null) return false;
 
     if (idx === 0) {
-        stack_remove(ext, node, window_id);
+        stack_remove(tabs, node, window_id);
         return false;
     }
 
-    stack_swap(ext, node, idx - 1, idx);
+    stack_swap(tabs, node, idx - 1, idx);
     return true;
 }
 
 /** Move the window in a stack to the right, and detach if it is at the end. */
-export function stack_move_right(ext: Ext, node: NodeStack, window_id: WindowId): boolean {
+export function stack_move_right(tabs: TabBars, node: NodeStack, window_id: WindowId): boolean {
     const idx = stack_find(node, window_id);
     if (idx === null) return false;
 
     if (idx === node.windows.length - 1) {
-        stack_remove(ext, node, window_id);
+        stack_remove(tabs, node, window_id);
         return false;
     }
 
-    stack_swap(ext, node, idx + 1, idx);
+    stack_swap(tabs, node, idx + 1, idx);
     return true;
 }
 
@@ -247,18 +273,12 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Calculates the future arrangement of windows in this node */
-    measure(
-        tiler: Forest,
-        ext: Ext,
-        parent: Fork,
-        area: Rect,
-        record: (win: WindowId, parent: Fork, area: Rect) => void,
-    ) {
+    measure(layout: Layout, parent: Fork, area: Rect) {
         switch (this.inner.kind) {
             case NodeKind.FORK:
                 const fork = this.inner.fork;
                 if (!fork.detached) {
-                    fork.measure(tiler, ext, area, record);
+                    fork.measure(layout, area);
                 }
 
                 break;
@@ -266,18 +286,16 @@ export class Node<T extends NodeADT = NodeADT> {
                 // Only a tabbed leaf leaves room for its tab bar
                 this.inner.rect = copy_rect(area);
                 if (this.inner.tabbed) {
-                    const tab_height = ext.sizes.scale * TAB_HEIGHT_UNSCALED;
+                    const tab_height = layout.tab_height();
                     this.inner.rect.y = Math.trunc(this.inner.rect.y + tab_height);
                     this.inner.rect.height = Math.trunc(this.inner.rect.height - tab_height);
                 }
 
                 for (const window_id of this.inner.windows) {
-                    record(window_id, parent, this.inner.tabbed ? this.inner.rect : copy_rect(this.inner.rect));
+                    layout.place(window_id, parent, this.inner.tabbed ? this.inner.rect : copy_rect(this.inner.rect));
                 }
 
-                if (this.inner.tabbed && ext.gnome_forest) {
-                    ext.gnome_forest.forest.stack_updates.push([this.inner, parent]);
-                }
+                if (this.inner.tabbed) layout.restack(this.inner, parent);
         }
     }
 }

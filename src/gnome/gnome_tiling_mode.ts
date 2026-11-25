@@ -282,7 +282,7 @@ export class GnomeTilingMode {
         if (!this.ext.gnome_forest) return;
 
         const inner = branch.inner;
-        Node.stack_remove(this.ext, inner, focused.id);
+        Node.stack_remove(this.ext.tab_bars, inner, focused.id);
         this.ext.gnome_forest.detach_window(focused.id);
 
         if (fork.right) {
@@ -371,9 +371,9 @@ export class GnomeTilingMode {
         switch (direction) {
             case Direction.Left:
                 if (force_detach) {
-                    Node.stack_remove(this.ext, inner, focused_id);
+                    Node.stack_remove(this.ext.tab_bars, inner, focused_id);
                     detach(Orientation.HORIZONTAL, false);
-                } else if (!Node.stack_move_left(this.ext, inner, focused_id)) {
+                } else if (!Node.stack_move_left(this.ext.tab_bars, inner, focused_id)) {
                     detach(Orientation.HORIZONTAL, false);
                 }
 
@@ -382,9 +382,9 @@ export class GnomeTilingMode {
 
             case Direction.Right:
                 if (force_detach) {
-                    Node.stack_remove(this.ext, inner, focused_id);
+                    Node.stack_remove(this.ext.tab_bars, inner, focused_id);
                     detach(Orientation.HORIZONTAL, true);
-                } else if (!Node.stack_move_right(this.ext, inner, focused_id)) {
+                } else if (!Node.stack_move_right(this.ext.tab_bars, inner, focused_id)) {
                     detach(Orientation.HORIZONTAL, true);
                 }
 
@@ -392,12 +392,12 @@ export class GnomeTilingMode {
                 break;
 
             case Direction.Up:
-                Node.stack_remove(this.ext, inner, focused_id);
+                Node.stack_remove(this.ext.tab_bars, inner, focused_id);
                 detach(Orientation.VERTICAL, false);
                 break;
 
             case Direction.Down:
-                Node.stack_remove(this.ext, inner, focused_id);
+                Node.stack_remove(this.ext.tab_bars, inner, focused_id);
                 detach(Orientation.VERTICAL, true);
                 break;
         }
@@ -550,7 +550,7 @@ export class GnomeTilingMode {
                         }
 
                         if (fork.left.is_leaf() && fork.left.inner.tabbed) {
-                            Node.stack_remove(this.ext, fork.left.inner, focused.id);
+                            Node.stack_remove(this.ext.tab_bars, fork.left.inner, focused.id);
                         } else {
                             const temp = fork.right;
 
