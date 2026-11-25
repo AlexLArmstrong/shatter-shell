@@ -188,3 +188,21 @@ export function shortest_side(origin: [number, number], rect: Rect): number {
     shortest = Math.min(shortest, distance(origin, east(rect)));
     return Math.min(shortest, distance(origin, south(rect)));
 }
+
+export function copy_rect({ x, y, width, height }: Rect): Rect {
+    return { x, y, width, height };
+}
+
+/** A rectangle of whole pixels, each value cut toward zero, as mutter's rectangles keep them */
+export function whole_rect(x: number, y: number, width: number, height: number): Rect {
+    return { x: Math.trunc(x), y: Math.trunc(y), width: Math.trunc(width), height: Math.trunc(height) };
+}
+
+export function rects_equal(a: Rect, b: Rect): boolean {
+    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+/** Whether `inner` lies wholly within `outer` */
+export function contains_rect(outer: Rect, inner: Rect): boolean {
+    return inner.x >= outer.x && inner.y >= outer.y && xend(inner) <= xend(outer) && yend(inner) <= yend(outer);
+}

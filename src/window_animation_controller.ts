@@ -1,7 +1,7 @@
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
-import Mtk from 'gi://Mtk';
 
+import type { Rect } from './core/geom.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 
 import { Signals } from './core/signals.js';
@@ -34,7 +34,7 @@ export class WindowAnimationController {
      * The caller is responsible for checking {@link ExtensionSettings.get_animate_windows()}
      * to decide whether to call this function.
      */
-    start(window: MutterWindowHandle, actor: Meta.WindowActor, movement: Mtk.Rectangle) {
+    start(window: MutterWindowHandle, actor: Meta.WindowActor, movement: Rect) {
         const old_animation = this._popAnimation(actor);
         // Reuse the last clone if it exists, or create one later. Must be destroyed if we return early.
         let actor_clone = old_animation?.actor_clone;

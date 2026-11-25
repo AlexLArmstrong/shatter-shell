@@ -1,3 +1,4 @@
+import type { Rect } from '../core/geom.js';
 import type { WindowHandle } from '../core/window_handle.js';
 import type { Ext } from '../extension.js';
 import type { Fork } from '../fork.js';
@@ -313,14 +314,14 @@ export class MutterWindowHandle implements WindowHandle {
         return this.meta.get_transient_for() !== null;
     }
 
-    move(rect: Mtk.Rectangle, on_complete?: () => void) {
+    move(rect: Rect, on_complete?: () => void) {
         if (!this.same_workspace() && this.is_maximized()) {
             return;
         }
 
         const max_width = this.ext.settings.get_max_window_width();
         if (max_width > 0 && rect.width > max_width) {
-            rect.x += (rect.width - max_width) / 2;
+            rect.x = Math.trunc(rect.x + (rect.width - max_width) / 2);
             rect.width = max_width;
         }
 

@@ -1,5 +1,6 @@
 import { Extension, InjectionManager } from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import type { Rect } from './core/geom.js';
 import type { ExtEvent } from './events.js';
 import type { Fork, Tree } from './fork.js';
 import type { GnomeForest } from './gnome/gnome_forest.js';
@@ -136,7 +137,7 @@ export class Ext {
     readonly window_animations = new WindowAnimationController(this.signals);
 
     /** The movements that have been queued for windows */
-    movements: Map<WindowId, Mtk.Rectangle> = new Map();
+    movements: Map<WindowId, Rect> = new Map();
 
     /** The windows that are snapped to the grid */
     snapped: Set<WindowId> = new Set();

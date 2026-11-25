@@ -1,9 +1,8 @@
-import Mtk from 'gi://Mtk';
-
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Fork } from './fork.js';
 
+import { copy_rect, type Rect } from './core/geom.js';
 import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
 /**
@@ -48,7 +47,7 @@ export interface NodeStack {
     active: WindowId;
     /** The window that was shown before, which is shown again when the active one leaves */
     prev_active: WindowId | null;
-    rect: Mtk.Rectangle | null;
+    rect: Rect | null;
     /** The fork whose branch this is, kept by {@link Fork} */
     parent: Fork | null;
 }
@@ -252,8 +251,8 @@ export class Node<T extends NodeADT = NodeADT> {
         tiler: Forest,
         ext: Ext,
         parent: Fork,
-        area: Mtk.Rectangle,
-        record: (win: WindowId, parent: Fork, area: Mtk.Rectangle) => void,
+        area: Rect,
+        record: (win: WindowId, parent: Fork, area: Rect) => void,
     ) {
         switch (this.inner.kind) {
             case NodeKind.FORK:
@@ -265,15 +264,15 @@ export class Node<T extends NodeADT = NodeADT> {
                 break;
             case NodeKind.STACK:
                 // Only a tabbed leaf leaves room for its tab bar
-                this.inner.rect = area.copy();
+                this.inner.rect = copy_rect(area);
                 if (this.inner.tabbed) {
                     const tab_height = ext.sizes.scale * TAB_HEIGHT_UNSCALED;
-                    this.inner.rect.y += tab_height;
-                    this.inner.rect.height -= tab_height;
+                    this.inner.rect.y = Math.trunc(this.inner.rect.y + tab_height);
+                    this.inner.rect.height = Math.trunc(this.inner.rect.height - tab_height);
                 }
 
                 for (const window_id of this.inner.windows) {
-                    record(window_id, parent, this.inner.tabbed ? this.inner.rect : this.inner.rect.copy());
+                    record(window_id, parent, this.inner.tabbed ? this.inner.rect : copy_rect(this.inner.rect));
                 }
 
                 if (this.inner.tabbed && ext.gnome_forest) {

@@ -1,11 +1,11 @@
 import Meta from 'gi://Meta';
-import Mtk from 'gi://Mtk';
 
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 
 import * as arena from './arena.js';
 import * as geom from './core/geom.js';
+import { whole_rect, type Rect } from './core/geom.js';
 import * as movement from './core/movement.js';
 import { Orientation } from './core/orientation.js';
 import * as Fork from './fork.js';
@@ -24,7 +24,7 @@ export interface MoveByCursor {
 }
 
 interface MoveByKeyboard {
-    src: Mtk.Rectangle;
+    src: Rect;
 }
 
 interface MoveByAuto {
@@ -36,7 +36,7 @@ export type MoveBy = MoveByCursor | MoveByKeyboard | MoveByAuto;
 /** A request to move a window into a new location. */
 interface Request {
     parent: Fork.Fork;
-    rect: Mtk.Rectangle;
+    rect: Rect;
 }
 
 /** A collection of forks separated into trees
@@ -101,12 +101,12 @@ export class Forest implements Fork.TreeLinks {
     /** Likewise for detachments */
     on_detach: (child: WindowId) => void = () => {};
 
-    measure(ext: Ext, fork: Fork.Fork, area: Mtk.Rectangle) {
+    measure(ext: Ext, fork: Fork.Fork, area: Rect) {
         fork.measure(this, ext, area, this.on_record());
     }
 
     /** Measures and arranges windows in the tree from the given fork to the specified area. */
-    tile(ext: Ext, fork: Fork.Fork, area: Mtk.Rectangle) {
+    tile(ext: Ext, fork: Fork.Fork, area: Rect) {
         this.measure(ext, fork, area);
         this.arrange(ext);
     }
@@ -203,7 +203,7 @@ export class Forest implements Fork.TreeLinks {
         stack_from_left: boolean,
     ): Fork.Fork | null {
         /** Place a window in a fork based on where the window was originally located */
-        function place_by_keyboard(fork: Fork.Fork, src: Mtk.Rectangle, left: Mtk.Rectangle, right: Mtk.Rectangle) {
+        function place_by_keyboard(fork: Fork.Fork, src: Rect, left: Rect, right: Rect) {
             const from: [number, number] = [src.x + src.width / 2, src.y + src.height / 2];
 
             const lside = geom.shortest_side(from, left);
@@ -213,7 +213,7 @@ export class Forest implements Fork.TreeLinks {
         }
 
         /** By default, new attachments are positioned on the left of a branch */
-        function place(place_by: MoveBy, fork: Fork.Fork, left: Mtk.Rectangle, right: Mtk.Rectangle) {
+        function place(place_by: MoveBy, fork: Fork.Fork, left: Rect, right: Rect) {
             if ('swap' in place_by) {
                 const { orientation, swap } = place_by;
                 fork.set_orientation(orientation);
@@ -227,18 +227,12 @@ export class Forest implements Fork.TreeLinks {
          *
          * In the case of a vertical fork, the left and right halves are the top and bottom
          */
-        function area_of_halves(fork: Fork.Fork): [Mtk.Rectangle, Mtk.Rectangle] {
+        function area_of_halves(fork: Fork.Fork): [Rect, Rect] {
             const { x, y, width, height } = fork.area;
 
             return fork.is_horizontal()
-                ? [
-                      new Mtk.Rectangle({ y, height, width: width / 2, x: x }),
-                      new Mtk.Rectangle({ y, height, width: width / 2, x: x + width / 2 }),
-                  ]
-                : [
-                      new Mtk.Rectangle({ x, width, height: height / 2, y: y }),
-                      new Mtk.Rectangle({ x, width, height: height / 2, y: y + height / 2 }),
-                  ];
+                ? [whole_rect(x, y, width / 2, height), whole_rect(x + width / 2, y, width / 2, height)]
+                : [whole_rect(x, y, width, height / 2), whole_rect(x, y + height / 2, width, height / 2)];
         }
 
         /** Create a fork and place this new fork on the left branch */
@@ -315,7 +309,7 @@ export class Forest implements Fork.TreeLinks {
         return this;
     }
 
-    create_fork(left: Node.Node, right: Node.Node | null, area: Mtk.Rectangle, tree: Fork.Tree): Fork.Fork {
+    create_fork(left: Node.Node, right: Node.Node | null, area: Rect, tree: Fork.Tree): Fork.Fork {
         const orientation = area.width > area.height ? Orientation.HORIZONTAL : Orientation.VERTICAL;
         const fork = new Fork.Fork(this, left, right, area, tree, orientation);
         this.forks.add(fork);
@@ -327,10 +321,10 @@ export class Forest implements Fork.TreeLinks {
         for (const { root: fork } of this.trees()) {
             if (fork.smart_gapped) continue;
 
-            fork.area.x += change;
-            fork.area.y += change;
-            fork.area.width -= change * 2;
-            fork.area.height -= change * 2;
+            fork.area.x = Math.trunc(fork.area.x + change);
+            fork.area.y = Math.trunc(fork.area.y + change);
+            fork.area.width = Math.trunc(fork.area.width - change * 2);
+            fork.area.height = Math.trunc(fork.area.height - change * 2);
         }
     }
 
@@ -341,7 +335,7 @@ export class Forest implements Fork.TreeLinks {
         }
     }
 
-    add_tree(window: WindowId, area: Mtk.Rectangle, id: MonitorWorkspaceID): Fork.Tree {
+    add_tree(window: WindowId, area: Rect, id: MonitorWorkspaceID): Fork.Tree {
         const manager = global.workspace_manager;
         const workspace = manager.get_workspace_by_index(id[1]) ?? manager.get_active_workspace();
         const tree = new Fork.Tree(id[0], workspace);
@@ -468,13 +462,7 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Grows a sibling a fork. */
-    private grow_sibling(
-        ext: Ext,
-        fork_c: Fork.Fork,
-        is_left: boolean,
-        movement: movement.Movement,
-        crect: Mtk.Rectangle,
-    ) {
+    private grow_sibling(ext: Ext, fork_c: Fork.Fork, is_left: boolean, movement: movement.Movement, crect: Rect) {
         const resize_fork = () => this.resize_fork_(ext, fork_c, crect, movement, false);
 
         if (fork_c.is_horizontal()) {
@@ -558,7 +546,7 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Resize a window from a given fork based on a supplied movement. */
-    resize(ext: Ext, fork_c: Fork.Fork, window_id: WindowId, movement: movement.Movement, crect: Mtk.Rectangle) {
+    resize(ext: Ext, fork_c: Fork.Fork, window_id: WindowId, movement: movement.Movement, crect: Rect) {
         const is_left = fork_c.left.has(window_id);
         if ((movement & Movement.SHRINK) != 0) {
             this.shrink_sibling(ext, fork_c, is_left, movement, crect);
@@ -568,12 +556,12 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Higher order function which forwards record events to our record method. */
-    on_record(): (window_id: WindowId, parent: Fork.Fork, rect: Mtk.Rectangle) => void {
+    on_record(): (window_id: WindowId, parent: Fork.Fork, rect: Rect) => void {
         return (e, p, a) => this.record(e, p, a);
     }
 
     /** Records window movements which have been queued. */
-    private record(window_id: WindowId, parent: Fork.Fork, rect: Mtk.Rectangle) {
+    private record(window_id: WindowId, parent: Fork.Fork, rect: Rect) {
         this.requested.set(window_id, {
             parent: parent,
             rect: rect,
@@ -638,13 +626,7 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Resizes a fork in the direction that a movement requests */
-    private resize_fork_(
-        ext: Ext,
-        child_fork: Fork.Fork,
-        crect: Mtk.Rectangle,
-        mov: movement.Movement,
-        shrunk: boolean,
-    ) {
+    private resize_fork_(ext: Ext, child_fork: Fork.Fork, crect: Rect, mov: movement.Movement, shrunk: boolean) {
         let parent = this.parent_of(child_fork);
         let child = child_fork;
 
@@ -663,7 +645,7 @@ export class Forest implements Fork.TreeLinks {
             child = parent;
             is_left = child.left.is_fork(child_fork);
 
-            if (child.area.contains_rect(crect)) {
+            if (geom.contains_rect(child.area, crect)) {
                 if ((mov & UP) !== 0) {
                     if (shrunk) {
                         if (child.area.y + child.area.height > src_node.area.y + src_node.area.height) {
@@ -715,13 +697,7 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Shrinks the sibling of a fork, possibly shrinking the fork itself */
-    private shrink_sibling(
-        ext: Ext,
-        fork_c: Fork.Fork,
-        is_left: boolean,
-        movement: movement.Movement,
-        crect: Mtk.Rectangle,
-    ) {
+    private shrink_sibling(ext: Ext, fork_c: Fork.Fork, is_left: boolean, movement: movement.Movement, crect: Rect) {
         const resize_fork = () => this.resize_fork_(ext, fork_c, crect, movement, true);
         if (fork_c.is_horizontal()) {
             if ((movement & (DOWN | UP)) != 0) {
@@ -798,7 +774,7 @@ export class Forest implements Fork.TreeLinks {
     }
 }
 
-function move_window(ext: Ext, window: MutterWindowHandle, rect: Mtk.Rectangle, on_complete: () => void) {
+function move_window(ext: Ext, window: MutterWindowHandle, rect: Rect, on_complete: () => void) {
     if (!(window.meta instanceof Meta.Window)) {
         Log.error(`attempting to move a window in a tree which lacks a Meta.Window`);
         return;

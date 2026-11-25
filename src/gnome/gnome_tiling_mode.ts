@@ -3,6 +3,7 @@ import Mtk from 'gi://Mtk';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import type { Rect } from '../core/geom.js';
 import type { Ext } from '../extension.js';
 import type { NodeStack } from '../node.js';
 
@@ -407,7 +408,7 @@ export class GnomeTilingMode {
     move_auto_(
         mov1: Mtk.Rectangle,
         mov2: Mtk.Rectangle,
-        callback: (m: Mtk.Rectangle, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
+        callback: (m: Rect, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
     ) {
         if (this.ext.gnome_forest && this.window !== null) {
             const fork = this.ext.gnome_forest.attached.get(this.window);
@@ -433,7 +434,7 @@ export class GnomeTilingMode {
 
                 const resize = (
                     mov: Mtk.Rectangle,
-                    func: (m: Mtk.Rectangle, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
+                    func: (m: Rect, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
                 ) => {
                     if (func(toparea, crect, mov) || crect.equal(last)) return;
 

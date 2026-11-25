@@ -1,6 +1,6 @@
 import Meta from 'gi://Meta';
-import Mtk from 'gi://Mtk';
 
+import type { Rect } from './core/geom.js';
 import type { Ext } from './extension.js';
 
 import * as Window from './gnome/mutter_window_handle.js';
@@ -58,7 +58,7 @@ export function global(event: GlobalEvent): GlobalEventMessage {
     return { tag: 'global', event };
 }
 
-export function window_move(ext: Ext, window: Window.MutterWindowHandle, rect: Mtk.Rectangle): WindowMove {
+export function window_move(ext: Ext, window: Window.MutterWindowHandle, rect: Rect): WindowMove {
     ext.movements.set(window.id, rect);
     return { tag: 'window_move', window };
 }

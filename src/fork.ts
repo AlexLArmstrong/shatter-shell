@@ -1,10 +1,10 @@
 import Meta from 'gi://Meta';
-import Mtk from 'gi://Mtk';
 
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Node, NodeLeaf } from './node.js';
 
+import { copy_rect, whole_rect, type Rect } from './core/geom.js';
 import { Orientation } from './core/orientation.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import { workspaceID } from './lib.js';
@@ -74,7 +74,7 @@ export class Fork {
     /** The fork whose branch this one is, if it isn't the root of its tree */
     parent: Fork | null = null;
 
-    area: Mtk.Rectangle;
+    area: Rect;
 
     /** A number that tells forks apart in logs */
     readonly id: number = next_fork_id++;
@@ -103,7 +103,7 @@ export class Fork {
         private readonly links: TreeLinks,
         left: Node,
         right: Node | null,
-        area: Mtk.Rectangle,
+        area: Rect,
         tree: Tree,
         orientation = Orientation.HORIZONTAL,
     ) {
@@ -218,18 +218,18 @@ export class Fork {
     }
 
     /** The calculated left area of this fork */
-    area_of_left(ext: Ext): Mtk.Rectangle {
+    area_of_left(ext: Ext): Rect {
         let { x, y, width, height } = this.area;
         if (this.is_horizontal()) {
             width = this.length_left - ext.sizes.gap_inner_half;
         } else {
             height = this.length_left - ext.sizes.gap_inner_half;
         }
-        return new Mtk.Rectangle({ x, y, width, height });
+        return whole_rect(x, y, width, height);
     }
 
     /** The calculated right area of this fork */
-    area_of_right(ext: Ext): Mtk.Rectangle {
+    area_of_right(ext: Ext): Rect {
         let { x, y, width, height } = this.area;
         if (this.is_horizontal()) {
             x = x + this.length_left + ext.sizes.gap_inner_half;
@@ -238,7 +238,7 @@ export class Fork {
             y = y + this.length_left + ext.sizes.gap_inner_half;
             height = height - this.length_left - ext.sizes.gap_inner_half;
         }
-        return new Mtk.Rectangle({ x, y, width, height });
+        return whole_rect(x, y, width, height);
     }
 
     depth(): number {
@@ -273,7 +273,7 @@ export class Fork {
     }
 
     /** Sets a new area for this fork */
-    set_area(area: Mtk.Rectangle): Mtk.Rectangle {
+    set_area(area: Rect): Rect {
         this.area = area;
         return this.area;
     }
@@ -291,12 +291,7 @@ export class Fork {
     }
 
     /** Calculates the future arrangement of windows in this fork */
-    measure(
-        tiler: Forest,
-        ext: Ext,
-        area: Mtk.Rectangle,
-        record: (win: WindowId, parent: Fork, area: Mtk.Rectangle) => void,
-    ) {
+    measure(tiler: Forest, ext: Ext, area: Rect, record: (win: WindowId, parent: Fork, area: Rect) => void) {
         let ratio = null;
 
         const manually_moved = ext.grab.window !== null || ext.gnome_tiling_mode.resizing_window;
@@ -309,7 +304,7 @@ export class Fork {
                 ratio = this.length_left / this.length();
             }
 
-            this.area = this.set_area(area.copy());
+            this.area = this.set_area(copy_rect(area));
         } else if (this.orientation_changed) {
             this.orientation_changed = false;
             ratio = this.length_left / this.depth();
@@ -325,7 +320,7 @@ export class Fork {
         if (this.right) {
             const [l, p, startpos] = this.is_horizontal() ? [WIDTH, XPOS, this.area.x] : [HEIGHT, YPOS, this.area.y];
 
-            const region = this.area.copy();
+            const region = copy_rect(this.area);
 
             const half = this.area[l] / 2;
 
@@ -353,12 +348,12 @@ export class Fork {
                 }
             }
 
-            region[l] = length - ext.sizes.gap_inner_half;
+            region[l] = Math.trunc(length - ext.sizes.gap_inner_half);
 
             this.left.measure(tiler, ext, this, region, record);
 
-            region[p] = region[p] + length + ext.sizes.gap_inner_half;
-            region[l] = this.area[l] - length - ext.sizes.gap_inner_half;
+            region[p] = Math.trunc(region[p] + length + ext.sizes.gap_inner_half);
+            region[l] = Math.trunc(this.area[l] - length - ext.sizes.gap_inner_half);
 
             this.right.measure(tiler, ext, this, region, record);
         } else {
@@ -366,7 +361,7 @@ export class Fork {
         }
     }
 
-    migrate(ext: Ext, forest: Forest, area: Mtk.Rectangle, monitor: MonitorID, workspace: WorkspaceID) {
+    migrate(ext: Ext, forest: Forest, area: Rect, monitor: MonitorID, workspace: WorkspaceID) {
         if (ext.gnome_forest && this.is_root) {
             const primary = global.display.get_primary_monitor() === monitor;
 
@@ -395,12 +390,12 @@ export class Fork {
                 }
             }
 
-            area.x += ext.sizes.gap_outer;
-            area.y += ext.sizes.gap_outer;
-            area.width -= ext.sizes.gap_outer * 2;
-            area.height -= ext.sizes.gap_outer * 2;
+            area.x = Math.trunc(area.x + ext.sizes.gap_outer);
+            area.y = Math.trunc(area.y + ext.sizes.gap_outer);
+            area.width = Math.trunc(area.width - ext.sizes.gap_outer * 2);
+            area.height = Math.trunc(area.height - ext.sizes.gap_outer * 2);
 
-            this.set_area(area.copy());
+            this.set_area(copy_rect(area));
             this.measure(forest, ext, area, forest.on_record());
             forest.arrange(ext);
 

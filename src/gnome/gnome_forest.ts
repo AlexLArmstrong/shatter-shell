@@ -5,6 +5,7 @@ import type { Forest, MoveBy, MoveByCursor } from '../forest.js';
 import type { Fork } from '../fork.js';
 import type { MutterWindowHandle } from './mutter_window_handle.js';
 
+import { copy_rect, type Rect } from '../core/geom.js';
 import * as geom from '../core/geom.js';
 import { Orientation } from '../core/orientation.js';
 import * as lib from '../lib.js';
@@ -162,7 +163,7 @@ export class GnomeForest {
                 fork.set_area(rect);
             }
 
-            this.tile(fork, fork.area.copy());
+            this.tile(fork, copy_rect(fork.area));
             return true;
         }
 
@@ -395,7 +396,7 @@ export class GnomeForest {
 
         const is_sibling = this.windows_are_siblings(win.id, attach_to.id);
 
-        const attach_area: Mtk.Rectangle =
+        const attach_area: Rect =
             (win.stack === null && attach_to.stack === null && is_sibling) || (win.stack === null && is_sibling)
                 ? fork.area
                 : attach_to.meta.get_frame_rect();
@@ -477,7 +478,7 @@ export class GnomeForest {
         });
     }
 
-    tile(fork: Fork, area: Mtk.Rectangle) {
+    tile(fork: Fork, area: Rect) {
         this.forest.tile(this.ext, fork, area);
     }
 
@@ -670,7 +671,7 @@ export class GnomeForest {
  *
  * A null indicates that the window should be stacked
  */
-export function cursor_placement(ext: Ext, area: Mtk.Rectangle, cursor: Mtk.Rectangle): MoveByCursor | null {
+export function cursor_placement(ext: Ext, area: Rect, cursor: Mtk.Rectangle): MoveByCursor | null {
     const { LEFT, RIGHT, TOP, BOTTOM } = geom.Side;
     const { HORIZONTAL, VERTICAL } = Orientation;
 

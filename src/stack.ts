@@ -1,3 +1,4 @@
+import type { Rect } from './core/geom.js';
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import type { NodeStack } from './node.js';
@@ -168,7 +169,7 @@ export class Stack {
 
     stack_rect: Mtk.Rectangle = new Mtk.Rectangle({ x: 0, y: 0, width: 0, height: 0 });
 
-    private rect: Mtk.Rectangle = new Mtk.Rectangle({ x: 0, y: 0, width: 0, height: 0 });
+    private rect: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
     private restacker: SignalID = global.display.connect('restacked', () => this.restack());
 
@@ -566,7 +567,7 @@ export class Stack {
     }
 
     /** Updates the dimensions and positions of the stack's actors */
-    update_positions(rect: Mtk.Rectangle) {
+    update_positions(rect: Rect) {
         if (!this.widgets) return;
 
         this.rect = rect;
