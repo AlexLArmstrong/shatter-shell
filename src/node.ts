@@ -45,11 +45,11 @@ export interface NodeStack {
     /** The index of the Stack in Forest.stacks that draws this leaf, which only a tabbed one has */
     idx: number | null;
     /** The windows, in the order of their tabs */
-    entities: Array<Entity>;
+    entities: Array<WindowId>;
     /** The window that is shown. It's always one of the entities while there are any. */
-    active: Entity;
+    active: WindowId;
     /** The window that was shown before, which is shown again when the active one leaves */
-    prev_active: Entity | null;
+    prev_active: WindowId | null;
     rect: Mtk.Rectangle | null;
     /** The fork whose branch this is, kept by {@link Fork} */
     parent: Fork | null;
@@ -67,16 +67,16 @@ function sync_tabs(ext: Ext, node: NodeStack) {
     ext.gnome_forest?.update_stack(node);
 }
 
-export function stack_find(node: NodeStack, entity: Entity) {
-    const idx = node.entities.findIndex(other => Ecs.entity_eq(entity, other));
+export function stack_find(node: NodeStack, entity: WindowId) {
+    const idx = node.entities.findIndex(other => entity === other);
     return idx === -1 ? null : idx;
 }
 
 /** Shows this window of the stack, and remembers the one that was shown before */
-export function stack_activate(ext: Ext, node: NodeStack, entity: Entity) {
+export function stack_activate(ext: Ext, node: NodeStack, entity: WindowId) {
     if (stack_find(node, entity) === null) return;
 
-    if (!Ecs.entity_eq(node.active, entity)) {
+    if (node.active !== entity) {
         node.prev_active = node.active;
         node.active = entity;
     }
@@ -85,7 +85,7 @@ export function stack_activate(ext: Ext, node: NodeStack, entity: Entity) {
 }
 
 /** Adds a window at either end of a stack, behind its active window */
-export function stack_insert(ext: Ext, node: NodeStack, entity: Entity, at_end: boolean) {
+export function stack_insert(ext: Ext, node: NodeStack, entity: WindowId, at_end: boolean) {
     if (at_end) {
         node.entities.push(entity);
     } else {
@@ -100,18 +100,18 @@ export function stack_insert(ext: Ext, node: NodeStack, entity: Entity, at_end: 
  * Removes a window from a stack, returning where it was. If it was the active one, the previously
  * active window takes over if it's still there, and otherwise the one that is now in its place.
  */
-export function stack_remove(ext: Ext, node: NodeStack, entity: Entity): number | null {
+export function stack_remove(ext: Ext, node: NodeStack, entity: WindowId): number | null {
     const idx = stack_find(node, entity);
     if (idx === null) return null;
 
     node.entities.splice(idx, 1);
     node.parent?.let_go_window(node, entity);
 
-    if (node.prev_active && Ecs.entity_eq(node.prev_active, entity)) node.prev_active = null;
+    if (node.prev_active === entity) node.prev_active = null;
 
-    if (Ecs.entity_eq(node.active, entity)) {
+    if (node.active === entity) {
         const next = node.prev_active ?? node.entities[Math.min(idx, node.entities.length - 1)];
-        if (next) node.active = next;
+        if (next !== undefined) node.active = next;
         node.prev_active = null;
     }
 
@@ -123,7 +123,7 @@ export function stack_remove(ext: Ext, node: NodeStack, entity: Entity): number 
  * Puts another window in the place of one in a stack, such as when swapping windows, and makes it
  * active if that one was
  */
-export function stack_replace(ext: Ext, node: NodeStack, old: Entity, entity: Entity) {
+export function stack_replace(ext: Ext, node: NodeStack, old: WindowId, entity: WindowId) {
     const idx = stack_find(node, old);
     if (idx === null) return;
 
@@ -131,8 +131,8 @@ export function stack_replace(ext: Ext, node: NodeStack, old: Entity, entity: En
     node.parent?.hold_window(node, entity);
     // A window that is still in the stack, such as when it replaces itself, stays linked to it
     if (stack_find(node, old) === null) node.parent?.let_go_window(node, old);
-    if (Ecs.entity_eq(node.active, old)) node.active = entity;
-    if (node.prev_active && Ecs.entity_eq(node.prev_active, old)) node.prev_active = entity;
+    if (node.active === old) node.active = entity;
+    if (node.prev_active === old) node.prev_active = entity;
 
     sync_tabs(ext, node);
 }
@@ -148,7 +148,7 @@ function stack_swap(ext: Ext, node: NodeStack, from: number, to: number) {
 }
 
 /** Move the window in a stack to the left, and detach if it it as the end. */
-export function stack_move_left(ext: Ext, node: NodeStack, entity: Entity): boolean {
+export function stack_move_left(ext: Ext, node: NodeStack, entity: WindowId): boolean {
     const idx = stack_find(node, entity);
     if (idx === null) return false;
 
@@ -162,7 +162,7 @@ export function stack_move_left(ext: Ext, node: NodeStack, entity: Entity): bool
 }
 
 /** Move the window in a stack to the right, and detach if it is at the end. */
-export function stack_move_right(ext: Ext, node: NodeStack, entity: Entity): boolean {
+export function stack_move_right(ext: Ext, node: NodeStack, entity: WindowId): boolean {
     const idx = stack_find(node, entity);
     if (idx === null) return false;
 
@@ -192,7 +192,7 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Creates a leaf of one window, without tabs */
-    static window(entity: Entity): Node<NodeStack> {
+    static window(entity: WindowId): Node<NodeStack> {
         return new Node({
             kind: NodeKind.STACK,
             tabbed: false,
@@ -225,12 +225,12 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Whether this is a leaf that holds the window, with tabs or without */
-    has(entity: Entity): this is Node<NodeStack> {
-        return this.is_leaf() && this.inner.entities.some(other => Ecs.entity_eq(entity, other));
+    has(entity: WindowId): this is Node<NodeStack> {
+        return this.is_leaf() && this.inner.entities.some(other => entity === other);
     }
 
     /** Whether this is a leaf with tabs that holds the window */
-    is_in_stack(entity: Entity): this is Node<NodeStack> {
+    is_in_stack(entity: WindowId): this is Node<NodeStack> {
         return this.has(entity) && this.inner.tabbed;
     }
 
@@ -240,12 +240,12 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Whether this is a leaf without tabs, which holds only this window */
-    is_window(entity: Entity): this is Node<NodeStack> {
+    is_window(entity: WindowId): this is Node<NodeStack> {
         return this.has(entity) && !this.inner.tabbed;
     }
 
     /** The window of a leaf without tabs, or null for any other node */
-    lone_window(): Entity | null {
+    lone_window(): WindowId | null {
         return this.is_leaf() && !this.inner.tabbed ? (this.inner.entities[0] ?? null) : null;
     }
 
@@ -255,7 +255,7 @@ export class Node<T extends NodeADT = NodeADT> {
         ext: Ext,
         parent: Entity,
         area: Mtk.Rectangle,
-        record: (win: Entity, parent: Entity, area: Mtk.Rectangle) => void,
+        record: (win: WindowId, parent: Entity, area: Mtk.Rectangle) => void,
     ) {
         switch (this.inner.kind) {
             case NodeKind.FORK:

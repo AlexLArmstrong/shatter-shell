@@ -118,7 +118,7 @@ export class GnomeExceptions {
         const gnome_forest = ext.gnome_forest;
         if (!gnome_forest) return;
 
-        for (const [entity, window] of ext.windows.iter()) {
+        for (const [entity, window] of ext.windows) {
             const attachment = gnome_forest.attached.get(entity);
             if (window.is_tilable()) {
                 if (!attachment) {

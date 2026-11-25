@@ -56,7 +56,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
     private readonly trees_ = new Set<Fork.Tree>();
 
     /** Stores window positions that have been requested. */
-    requested: Map<Entity, Request> = new Map();
+    requested: Map<WindowId, Request> = new Map();
 
     /** Stores stacks which must have their containers redrawn */
     stack_updates: Array<[Node.NodeStack, Entity]> = [];
@@ -67,28 +67,25 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
     /** The tab bars of the leaves that have tabs, by NodeStack.idx */
     stacks: arena.Arena<Stack> = new Arena();
 
-    /**
-     * The leaf that holds each tiled window. The windows are Ext's entities, so it isn't one of this
-     * world's storages, which deleting a fork would clear by the fork's entity.
-     */
-    readonly leaves = new Ecs.Storage<Node.NodeLeaf>();
+    /** The leaf that holds each tiled window */
+    readonly leaves = new Map<WindowId, Node.NodeLeaf>();
 
     parent_of(fork_entity: Entity): Entity | null {
         return this.forks.get(fork_entity)?.parent?.entity ?? null;
     }
 
     /** The fork that holds the leaf of this window, if it's tiled */
-    fork_of(window: Entity): Entity | null {
+    fork_of(window: WindowId): Entity | null {
         return this.leaves.get(window)?.parent?.entity ?? null;
     }
 
-    leaf_of(window: Entity): Node.NodeLeaf | null {
-        return this.leaves.get(window);
+    leaf_of(window: WindowId): Node.NodeLeaf | null {
+        return this.leaves.get(window) ?? null;
     }
 
     /** Every tiled window, with the fork that holds its leaf */
-    *tiled(): Generator<[Entity, Entity], void> {
-        for (const [window, leaf] of this.leaves.iter()) {
+    *tiled(): Generator<[WindowId, Entity], void> {
+        for (const [window, leaf] of this.leaves) {
             if (leaf.parent) yield [window, leaf.parent.entity];
         }
     }
@@ -102,10 +99,10 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
      * The callback to execute when a window starts being tiled. It isn't called when a tiled window
      * only moves to another place in the tree.
      */
-    on_attach: (window: Entity) => void = () => {};
+    on_attach: (window: WindowId) => void = () => {};
 
     /** Likewise for detachments */
-    on_detach: (child: Entity) => void = () => {};
+    on_detach: (child: WindowId) => void = () => {};
 
     measure(ext: Ext, fork: Fork.Fork, area: Mtk.Rectangle) {
         fork.measure(this, ext, area, this.on_record());
@@ -127,8 +124,8 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
                 if (!window.actor_exists()) return;
             };
 
-            if (ext.gnome_tiling_mode.window) {
-                if (Ecs.entity_eq(ext.gnome_tiling_mode.window, entity)) {
+            if (ext.gnome_tiling_mode.window !== null) {
+                if (ext.gnome_tiling_mode.window === entity) {
                     on_complete = () => {
                         ext.set_overlay(window.frame());
 
@@ -147,7 +144,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         }
     }
 
-    attach_fork(ext: Ext, fork: Fork.Fork, window: Entity, is_left: boolean) {
+    attach_fork(ext: Ext, fork: Fork.Fork, window: WindowId, is_left: boolean) {
         const node = Node.Node.window(window);
 
         if (is_left) {
@@ -175,7 +172,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         ext: Ext,
         stack: Node.NodeStack,
         fork: Fork.Fork,
-        new_entity: Entity,
+        new_entity: WindowId,
         stack_from_left: boolean,
     ): [Entity, Fork.Fork] | null {
         const container = this.view_of(stack);
@@ -203,8 +200,8 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
     /** Attaches a `new` window to the fork which `onto` is attached to. */
     attach_window(
         ext: Ext,
-        onto_entity: Entity,
-        new_entity: Entity,
+        onto_entity: WindowId,
+        new_entity: WindowId,
         place_by: MoveBy,
         stack_from_left: boolean,
     ): [Entity, Fork.Fork] | null {
@@ -316,12 +313,12 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         return null;
     }
 
-    connect_on_attach(callback: (window: Entity) => void): this {
+    connect_on_attach(callback: (window: WindowId) => void): this {
         this.on_attach = callback;
         return this;
     }
 
-    connect_on_detach(callback: (child: Entity) => void): this {
+    connect_on_detach(callback: (child: WindowId) => void): this {
         this.on_detach = callback;
         return this;
     }
@@ -354,7 +351,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         }
     }
 
-    add_tree(window: Entity, area: Mtk.Rectangle, id: MonitorWorkspaceID): Fork.Tree {
+    add_tree(window: WindowId, area: Mtk.Rectangle, id: MonitorWorkspaceID): Fork.Tree {
         const manager = global.workspace_manager;
         const workspace = manager.get_workspace_by_index(id[1]) ?? manager.get_active_workspace();
         const tree = new Fork.Tree(id[0], workspace);
@@ -377,7 +374,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
     }
 
     /** Detaches an entity from the a fork, re-arranging the fork's tree as necessary */
-    detach(ext: Ext, fork_entity: Entity, window: Entity): [Entity, Fork.Fork] | null {
+    detach(ext: Ext, fork_entity: Entity, window: WindowId): [Entity, Fork.Fork] | null {
         const fork = this.forks.get(fork_entity);
         if (!fork) return null;
 
@@ -559,7 +556,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         let largest_window = null;
         let largest_size = 0;
 
-        const window_compare = (entity: Entity) => {
+        const window_compare = (entity: WindowId) => {
             const window = ext.windows.get(entity);
             if (window && window.is_tilable()) {
                 const rect = window.frame();
@@ -583,7 +580,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         ext: Ext,
         fork_e: Entity,
         fork_c: Fork.Fork,
-        win_e: Entity,
+        win_e: WindowId,
         movement: movement.Movement,
         crect: Mtk.Rectangle,
     ) {
@@ -596,12 +593,12 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
     }
 
     /** Higher order function which forwards record events to our record method. */
-    on_record(): (entity: Entity, parent: Entity, rect: Mtk.Rectangle) => void {
+    on_record(): (entity: WindowId, parent: Entity, rect: Mtk.Rectangle) => void {
         return (e, p, a) => this.record(e, p, a);
     }
 
     /** Records window movements which have been queued. */
-    private record(entity: Entity, parent: Entity, rect: Mtk.Rectangle) {
+    private record(entity: WindowId, parent: Entity, rect: Mtk.Rectangle) {
         this.requested.set(entity, {
             parent: parent,
             rect: rect,
@@ -793,7 +790,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
                 return fork.detached ? 'Missing Fork' : this.display_fork(ext, fork.entity, fork, scope + 1);
             case Node.NodeKind.STACK:
                 const lone = branch.lone_window();
-                if (lone) {
+                if (lone !== null) {
                     const window = ext.windows.get(lone);
                     const area = window ? geom.fmt(window.frame()) : 'unknown area';
                     const parent = ext.gnome_forest?.attached.get(lone);

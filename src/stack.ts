@@ -1,11 +1,9 @@
-import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import type { NodeStack } from './node.js';
 import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
-import * as Ecs from './ecs.js';
 import * as Node from './node.js';
 
 const Arena = a.Arena;
@@ -28,7 +26,7 @@ export const TAB_HEIGHT_UNSCALED = 43 as const;
 const TAB_SEPARATION_UNSCALED = 3 as const;
 
 interface Tab {
-    entity: Entity;
+    entity: WindowId;
     button: number;
     button_signal: SignalID | null;
     signals: Array<SignalID>;
@@ -158,7 +156,7 @@ export class Stack {
     tabs: Array<Tab> = [];
 
     /** The active window as last drawn, so that sync can tell whether it changed */
-    private drawn_active: Entity | null = null;
+    private drawn_active: WindowId | null = null;
 
     /** The window whose position and size the tab bar follows, with its signals */
     private followed: [Meta.Window, SignalID, SignalID] | null = null;
@@ -196,12 +194,12 @@ export class Stack {
     }
 
     /** The window that is shown, which the leaf decides */
-    get active(): Entity {
+    get active(): WindowId {
         return this.node.active;
     }
 
     /** The window that was shown before, which the leaf decides */
-    get prev_active(): Entity | null {
+    get prev_active(): WindowId | null {
         return this.node.prev_active;
     }
 
@@ -210,8 +208,8 @@ export class Stack {
         return this.index_of(this.active);
     }
 
-    private index_of(entity: Entity): number {
-        return this.tabs.findIndex(tab => Ecs.entity_eq(tab.entity, entity));
+    private index_of(entity: WindowId): number {
+        return this.tabs.findIndex(tab => tab.entity === entity);
     }
 
     /**
@@ -227,8 +225,8 @@ export class Stack {
             if (window) windows.push(window);
         }
 
-        const in_windows = (entity: Entity) => windows.some(window => Ecs.entity_eq(window.entity, entity));
-        const added: Array<Entity> = [];
+        const in_windows = (entity: WindowId) => windows.some(window => window.entity === entity);
+        const added: Array<WindowId> = [];
 
         for (let idx = this.tabs.length - 1; idx >= 0; idx -= 1) {
             const tab = this.tabs[idx];
@@ -256,7 +254,7 @@ export class Stack {
             if (button) this.widgets.tabs.set_child_at_index(button, idx);
         }
 
-        if (this.drawn_active === null || !Ecs.entity_eq(this.drawn_active, this.active)) {
+        if (this.drawn_active === null || this.drawn_active !== this.active) {
             this.follow_active();
         }
 
@@ -268,7 +266,7 @@ export class Stack {
         if (!this.widgets) return;
 
         const entity = window.entity;
-        const active = Ecs.entity_eq(entity, this.active);
+        const active = entity === this.active;
 
         const button = new TabButton(window, this.ext.settings);
         button.natural_height = this.tab_height - this.tab_separation;
@@ -284,11 +282,11 @@ export class Stack {
     }
 
     activate_prev() {
-        if (this.prev_active) this.activate(this.prev_active);
+        if (this.prev_active !== null) this.activate(this.prev_active);
     }
 
     /** Shows this window of the stack, by changing the leaf */
-    activate(entity: Entity) {
+    activate(entity: WindowId) {
         Node.stack_activate(this.ext, this.node, entity);
     }
 
@@ -297,15 +295,15 @@ export class Stack {
      * another workspace are shown by mutter along with it, so the tab bar only shows where the
      * stack may. The windows of tabs that were only just added change without fading.
      */
-    private show_active(added: Array<Entity>) {
+    private show_active(added: Array<WindowId>) {
         if (!this.widgets) return;
         this.widgets.tabs.visible = this.permitted_to_show();
         this.drawn_active = this.active;
 
         for (const tab of this.tabs) {
             this.window_exec(tab, tab.entity, window => {
-                const active = Ecs.entity_eq(tab.entity, this.active);
-                const is_new = added.some(entity => Ecs.entity_eq(entity, tab.entity));
+                const active = tab.entity === this.active;
+                const is_new = added.some(entity => entity === tab.entity);
 
                 if (active) {
                     if (is_new) window.visibility.show_now();
@@ -366,7 +364,7 @@ export class Stack {
         if (button) {
             const change_id = settings.ext.connect('changed', (_, key) => {
                 if (key === 'hint-color-rgba') {
-                    const active = Ecs.entity_eq(tab.entity, this.active);
+                    const active = tab.entity === this.active;
                     button.set_active(active ? TabActive.active : TabActive.inactive);
                 }
                 return false;
@@ -374,7 +372,7 @@ export class Stack {
             button.connect('destroy', () => {
                 settings.ext.disconnect(change_id);
             });
-            const active = Ecs.entity_eq(tab.entity, this.active);
+            const active = tab.entity === this.active;
             button.set_active(active ? TabActive.active : TabActive.inactive);
         }
     }
@@ -631,7 +629,7 @@ export class Stack {
         this.ext.show_border_on_focused();
     }
 
-    private window_exec(tab: Tab, entity: Entity, func: (window: MutterWindowHandle) => void) {
+    private window_exec(tab: Tab, entity: WindowId, func: (window: MutterWindowHandle) => void) {
         const window = this.ext.windows.get(entity);
         if (window && window.actor_exists()) {
             func(window);

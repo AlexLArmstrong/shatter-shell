@@ -7,7 +7,6 @@ import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Node, NodeLeaf } from './node.js';
 
-import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import { workspaceID } from './lib.js';
 import * as node from './node.js';
@@ -22,7 +21,7 @@ const HEIGHT = 'height' as const;
 /** The links back up a tree, which its forks keep in step with their branches */
 export interface TreeLinks {
     /** The leaf that holds each tiled window */
-    readonly leaves: Ecs.Storage<NodeLeaf>;
+    readonly leaves: Map<WindowId, NodeLeaf>;
 }
 
 /** A tree of forks: its root fork, and where it is, which all of its forks share */
@@ -175,13 +174,13 @@ export class Fork {
     }
 
     /** Records that the window is in this fork's leaf */
-    hold_window(leaf: NodeLeaf, window: Entity) {
-        this.links.leaves.insert(window, leaf);
+    hold_window(leaf: NodeLeaf, window: WindowId) {
+        this.links.leaves.set(window, leaf);
     }
 
     /** Forgets that the window is in the leaf, unless it has moved to another leaf since */
-    let_go_window(leaf: NodeLeaf, window: Entity) {
-        if (this.links.leaves.get(window) === leaf) this.links.leaves.remove(window);
+    let_go_window(leaf: NodeLeaf, window: WindowId) {
+        if (this.links.leaves.get(window) === leaf) this.links.leaves.delete(window);
     }
 
     private replaced(previous: Node | null, branch: Node | null) {
@@ -244,7 +243,7 @@ export class Fork {
         return this.is_horizontal() ? this.area.height : this.area.width;
     }
 
-    find_branch(entity: Entity): Node | null {
+    find_branch(entity: WindowId): Node | null {
         const locate = (branch: Node): Node | null => (branch.has(entity) ? branch : null);
 
         const node = locate(this.left);
@@ -294,7 +293,7 @@ export class Fork {
         tiler: Forest,
         ext: Ext,
         area: Mtk.Rectangle,
-        record: (win: Entity, parent: Entity, area: Mtk.Rectangle) => void,
+        record: (win: WindowId, parent: Entity, area: Mtk.Rectangle) => void,
     ) {
         let ratio = null;
 
@@ -463,12 +462,12 @@ function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
     }
 }
 
-function window_minimum_size(ext: Ext, entity: Entity): [number, number] {
+function window_minimum_size(ext: Ext, entity: WindowId): [number, number] {
     return ext.windows.get(entity)?.minimum_size() ?? [0, 0];
 }
 
 /** Gets the stack's minimum size based on its windows and the tab bar. */
-function stack_minimum_size(ext: Ext, entities: Entity[]): [number, number] {
+function stack_minimum_size(ext: Ext, entities: WindowId[]): [number, number] {
     let width = 0;
     let height = 0;
     for (const entity of entities) {

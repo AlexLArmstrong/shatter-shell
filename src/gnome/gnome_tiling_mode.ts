@@ -4,7 +4,6 @@ import Mtk from 'gi://Mtk';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import type { Entity } from '../ecs.js';
 import type { Ext } from '../extension.js';
 import type { NodeStack } from '../node.js';
 
@@ -31,12 +30,12 @@ export enum Direction {
 export class GnomeTilingMode {
     private keybindings;
 
-    window: Entity | null = null;
+    window: WindowId | null = null;
 
     moving: boolean = false;
     resizing_window: boolean = false;
 
-    private swap_window: Entity | null = null;
+    private swap_window: WindowId | null = null;
 
     queue: exec.ChannelExecutor<() => void> = new exec.ChannelExecutor();
 
@@ -189,7 +188,7 @@ export class GnomeTilingMode {
     }
 
     move(
-        window: Entity | null,
+        window: WindowId | null,
         x: number,
         y: number,
         w: number,
@@ -197,7 +196,7 @@ export class GnomeTilingMode {
         direction: Direction,
         focus: () => window.MutterWindowHandle | MonitorID | null,
     ) {
-        if (!window) return;
+        if (window === null) return;
         const win = this.ext.windows.get(window);
         if (!win) return;
 
@@ -411,7 +410,7 @@ export class GnomeTilingMode {
         mov2: Mtk.Rectangle,
         callback: (m: Mtk.Rectangle, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
     ) {
-        if (this.ext.gnome_forest && this.window) {
+        if (this.ext.gnome_forest && this.window !== null) {
             const entity = this.ext.gnome_forest.attached.get(this.window);
             if (entity) {
                 const fork = this.ext.gnome_forest.forest.forks.get(entity);
@@ -469,7 +468,7 @@ export class GnomeTilingMode {
     }
 
     rect_by_active_area(callback: (monitor: Mtk.Rectangle, area: Mtk.Rectangle) => void) {
-        if (this.window) {
+        if (this.window !== null) {
             const window = this.ext.windows.get(this.window);
             if (window) {
                 const monitor = this.ext.monitor_work_area(this.ext.placement(window)[0]);
@@ -598,7 +597,7 @@ export class GnomeTilingMode {
         }
     }
 
-    move_left(window?: Entity) {
+    move_left(window?: WindowId) {
         this.move(
             window ?? this.window,
             -1,
@@ -614,7 +613,7 @@ export class GnomeTilingMode {
         );
     }
 
-    move_down(window?: Entity) {
+    move_down(window?: WindowId) {
         this.move(
             window ?? this.window,
             0,
@@ -630,7 +629,7 @@ export class GnomeTilingMode {
         );
     }
 
-    move_up(window?: Entity) {
+    move_up(window?: WindowId) {
         this.move(
             window ?? this.window,
             0,
@@ -646,7 +645,7 @@ export class GnomeTilingMode {
         );
     }
 
-    move_right(window?: Entity) {
+    move_right(window?: WindowId) {
         this.move(
             window ?? this.window,
             1,
@@ -663,7 +662,7 @@ export class GnomeTilingMode {
     }
 
     resize(direction: Direction) {
-        if (!this.window) return;
+        if (this.window === null) return;
         this.resizing_window = true;
 
         if (this.ext.gnome_forest && !this.ext.windows.get(this.window)?.floating) {
@@ -704,47 +703,43 @@ export class GnomeTilingMode {
     }
 
     swap_left() {
-        if (this.swap_window) {
-            this.ext.windows.with(this.swap_window, window => {
-                this.swap(this.ext.focus_selector.left(this.ext, window));
-            });
+        if (this.swap_window !== null) {
+            const window = this.ext.windows.get(this.swap_window);
+            if (window) this.swap(this.ext.focus_selector.left(this.ext, window));
         } else {
             this.swap(this.ext.focus_selector.left(this.ext, null));
         }
     }
 
     swap_down() {
-        if (this.swap_window) {
-            this.ext.windows.with(this.swap_window, window => {
-                this.swap(this.ext.focus_selector.down(this.ext, window));
-            });
+        if (this.swap_window !== null) {
+            const window = this.ext.windows.get(this.swap_window);
+            if (window) this.swap(this.ext.focus_selector.down(this.ext, window));
         } else {
             this.swap(this.ext.focus_selector.down(this.ext, null));
         }
     }
 
     swap_up() {
-        if (this.swap_window) {
-            this.ext.windows.with(this.swap_window, window => {
-                this.swap(this.ext.focus_selector.up(this.ext, window));
-            });
+        if (this.swap_window !== null) {
+            const window = this.ext.windows.get(this.swap_window);
+            if (window) this.swap(this.ext.focus_selector.up(this.ext, window));
         } else {
             this.swap(this.ext.focus_selector.up(this.ext, null));
         }
     }
 
     swap_right() {
-        if (this.swap_window) {
-            this.ext.windows.with(this.swap_window, window => {
-                this.swap(this.ext.focus_selector.right(this.ext, window));
-            });
+        if (this.swap_window !== null) {
+            const window = this.ext.windows.get(this.swap_window);
+            if (window) this.swap(this.ext.focus_selector.right(this.ext, window));
         } else {
             this.swap(this.ext.focus_selector.right(this.ext, null));
         }
     }
 
     enter() {
-        if (!this.window) {
+        if (this.window === null) {
             const win = this.ext.get_focused_window();
             if (!win) return;
 
@@ -770,12 +765,12 @@ export class GnomeTilingMode {
     }
 
     accept() {
-        if (this.window) {
+        if (this.window !== null) {
             const meta = this.ext.windows.get(this.window);
             if (meta) {
                 let tree_swapped = false;
 
-                if (this.swap_window) {
+                if (this.swap_window !== null) {
                     const meta_swap = this.ext.windows.get(this.swap_window);
                     if (meta_swap) {
                         if (this.ext.gnome_forest) {
@@ -817,7 +812,7 @@ export class GnomeTilingMode {
     exit() {
         this.queue.clear();
 
-        if (this.window) {
+        if (this.window !== null) {
             this.window = null;
 
             // Disable overlay
@@ -837,7 +832,7 @@ export class GnomeTilingMode {
 
         win.move(rect);
 
-        this.ext.snapped.insert(win.entity, true);
+        this.ext.snapped.add(win.entity);
     }
 }
 

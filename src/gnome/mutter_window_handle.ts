@@ -44,7 +44,15 @@ enum RESTACK_SPEED {
 }
 
 export class MutterWindowHandle implements WindowHandle {
-    entity: Entity;
+    entity: WindowId;
+
+    /** The name of the window's app */
+    private readonly name_: string;
+
+    signals: Array<SignalID> = [];
+
+    /** The signals connected on the window while it's tilable, which are also in {@link signals} */
+    tilable_signals: Array<SignalID> = [];
     meta: Meta.Window;
     ext: Ext;
     grab: boolean = false;
@@ -86,8 +94,9 @@ export class MutterWindowHandle implements WindowHandle {
         return leaf?.kind === NodeKind.STACK ? leaf.idx : null;
     }
 
-    constructor(entity: Entity, window: Meta.Window, window_app: Shell.App, ext: Ext) {
+    constructor(entity: WindowId, window: Meta.Window, window_app: Shell.App, ext: Ext) {
         this.window_app = window_app;
+        this.name_ = window_app.get_name().replace(/&/g, '&amp;');
 
         this.entity = entity;
         this.meta = window;
@@ -137,19 +146,17 @@ export class MutterWindowHandle implements WindowHandle {
     }
 
     bind_window_events() {
-        this.ext.window_signals
-            .get_or(this.entity, () => [])
-            .push(
-                this.meta.connect('size-changed', () => this.window_changed()),
-                this.meta.connect('position-changed', () => this.window_changed()),
-                this.meta.connect('workspace-changed', () => this.workspace_changed()),
-                this.meta.connect('raised', () => this.window_raised()),
+        this.signals.push(
+            this.meta.connect('size-changed', () => this.window_changed()),
+            this.meta.connect('position-changed', () => this.window_changed()),
+            this.meta.connect('workspace-changed', () => this.workspace_changed()),
+            this.meta.connect('raised', () => this.window_raised()),
 
-                this.meta.connect('notify::resizeable', () => this.reconsider_tiling()),
-                this.meta.connect('notify::skip-taskbar', () => this.reconsider_tiling()),
-                this.meta.connect('notify::window-type', () => this.reconsider_tiling()),
-                this.meta.connect('notify::wm-class', () => this.reconsider_tiling()),
-            );
+            this.meta.connect('notify::resizeable', () => this.reconsider_tiling()),
+            this.meta.connect('notify::skip-taskbar', () => this.reconsider_tiling()),
+            this.meta.connect('notify::window-type', () => this.reconsider_tiling()),
+            this.meta.connect('notify::wm-class', () => this.reconsider_tiling()),
+        );
     }
 
     private bind_hint_events() {
@@ -339,7 +346,7 @@ export class MutterWindowHandle implements WindowHandle {
     }
 
     name(): string {
-        return this.ext.names.get_or(this.entity, () => 'unknown');
+        return this.name_;
     }
 
     private on_style_changed() {

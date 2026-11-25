@@ -1,6 +1,5 @@
 import { Extension, InjectionManager } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import type { Entity } from './ecs.js';
 import type { ExtEvent } from './events.js';
 import type { Tree } from './fork.js';
 import type { GnomeForest } from './gnome/gnome_forest.js';
@@ -118,7 +117,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     readonly timeouts = new Set<number>();
 
     /** Which windows were focused most recently, overall and on each workspace */
-    readonly focus_history = new FocusHistory<Entity, WorkspaceID>(Ecs.entity_eq);
+    readonly focus_history = new FocusHistory<WindowId, WorkspaceID>((a, b) => a === b);
 
     /** Initially set to true when the extension is initializing */
     init: boolean = true;
@@ -134,27 +133,14 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     readonly window_animations = new WindowAnimationController(this.signals);
 
-    // Entity-component associations
+    /** The movements that have been queued for windows */
+    movements: Map<WindowId, Mtk.Rectangle> = new Map();
 
-    /** Store for stable sequences of each registered window */
-    ids: Ecs.Storage<number> = this.register_storage();
+    /** The windows that are snapped to the grid */
+    snapped: Set<WindowId> = new Set();
 
-    /** Stores movements that have been queued */
-    movements: Ecs.Storage<Mtk.Rectangle> = this.register_storage();
-
-    /** Store for names associated with windows */
-    names: Ecs.Storage<string> = this.register_storage();
-
-    /** Set to true if a window is snapped to the grid */
-    snapped: Ecs.Storage<boolean> = this.register_storage();
-
-    /** Primary storage for the window entities, containing the actual window */
-    windows: Ecs.Storage<Window.MutterWindowHandle> = this.register_storage();
-
-    /** Signals which have been registered for each window */
-    window_signals: Ecs.Storage<Array<SignalID>> = this.register_storage();
-    /** Signals which have been registered for each tilable window, a subset of {@link window_signals}. */
-    tilable_window_signals: Ecs.Storage<Array<SignalID>> = this.register_storage();
+    /** Every window that the extension manages */
+    windows: Map<WindowId, Window.MutterWindowHandle> = new Map();
 
     // Systems
 
@@ -200,7 +186,8 @@ export class Ext extends Ecs.System<ExtEvent> {
                 /** Validate that the window's actor still exists. */
                 if (!window.actor_exists()) return;
 
-                const movement = this.movements.remove(window.entity);
+                const movement = this.movements.get(window.entity);
+                this.movements.delete(window.entity);
                 if (!movement) return;
 
                 const actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
@@ -259,10 +246,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                             const attachment = this.gnome_forest.attached.get(win.entity);
                             if (attachment) {
                                 if (!win.meta.is_fullscreen()) {
-                                    const fork = this.gnome_forest.forest.forks.get(win.entity);
-                                    if (fork) {
-                                        this.gnome_forest.reflow(win.entity);
-                                    }
+                                    this.gnome_forest.reflow(win.entity);
                                     if (win.stack !== null) {
                                         this.gnome_forest.forest.stacks.get(win.stack)?.set_visible(true);
                                     }
@@ -320,7 +304,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         return workspaceID(id);
     }
 
-    /** Connects to a window signal and records it in {@link window_signals} and {@link tilable_window_signals}. */
+    /** Connects to a window signal and records it in the window's signals and tilable signals. */
     connect_meta(
         win: Window.MutterWindowHandle,
         signal: keyof Meta.Window.SignalSignatures,
@@ -330,8 +314,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (win.actor_exists()) callback();
         });
 
-        this.window_signals.get_or(win.entity, () => []).push(id);
-        this.tilable_window_signals.get_or(win.entity, () => []).push(id);
+        win.signals.push(id);
+        win.tilable_signals.push(id);
 
         return id;
     }
@@ -382,18 +366,13 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     disconnect_tilable_window_signals(win: Window.MutterWindowHandle) {
-        this.tilable_window_signals.take_with(win.entity, signals => {
-            const window_signals = this.window_signals.get(win.entity);
+        for (const signal of win.tilable_signals) {
+            win.meta.disconnect(signal);
 
-            for (const signal of signals) {
-                win.meta.disconnect(signal);
-
-                const i = window_signals?.indexOf(signal) ?? -1;
-                if (i !== -1) {
-                    window_signals!.splice(i, 1);
-                }
-            }
-        });
+            const i = win.signals.indexOf(signal);
+            if (i !== -1) win.signals.splice(i, 1);
+        }
+        win.tilable_signals = [];
     }
 
     exit_modes() {
@@ -452,14 +431,14 @@ export class Ext extends Ecs.System<ExtEvent> {
         return meta ? this.get_window(meta) : null;
     }
 
-    stack_select(select: (id: number, stack: stack.Stack) => Entity | null | undefined, focus_shift: () => void) {
+    stack_select(select: (id: number, stack: stack.Stack) => WindowId | null | undefined, focus_shift: () => void) {
         const switched = this.stack_switch(stack => {
             const stack_con = this.gnome_forest?.forest.view_of(stack);
             if (stack_con) {
                 const id = stack_con.active_id;
                 if (id !== -1) {
                     const next = select(id, stack_con);
-                    if (next) {
+                    if (next !== null && next !== undefined) {
                         stack_con.activate(next);
                         const window = this.windows.get(next);
                         if (window) {
@@ -491,7 +470,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Fetches the window component from the entity associated with the metacity window metadata. */
     get_window(meta: Meta.Window): Window.MutterWindowHandle | null {
         const entity = this.window_entity(meta);
-        return entity ? this.windows.get(entity) : null;
+        return entity === null ? null : (this.windows.get(entity) ?? null);
     }
 
     injections_add() {
@@ -538,7 +517,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             // Activate the last-active window on workspace.
             const workspace_id = this.active_workspace();
             const active = this.focus_history.last_on(workspace_id);
-            if (active) {
+            if (active !== null) {
                 const window = this.windows.get(active);
                 if (window && window.workspace_id() == workspace_id && !window.meta.minimized) {
                     activate_window(window);
@@ -560,7 +539,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
     }
 
-    on_destroy(win: Entity) {
+    on_destroy(win: WindowId) {
         // Exit tiling adjustment mode on window destroy.
         if (this.gnome_tiling_mode.window !== null && win == this.gnome_tiling_mode.window)
             this.gnome_tiling_mode.exit();
@@ -575,11 +554,9 @@ export class Ext extends Ecs.System<ExtEvent> {
         window.destroying = true;
 
         // Disconnect all signals on this window
-        this.window_signals.take_with(win, signals => {
-            for (const signal of signals) {
-                window.meta.disconnect(signal);
-            }
-        });
+        for (const signal of window.signals) window.meta.disconnect(signal);
+        window.signals = [];
+        window.tilable_signals = [];
 
         if (this.gnome_forest) {
             const entity = this.gnome_forest.attached.get(win);
@@ -588,7 +565,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 if (fork?.right && fork.right.is_window(win)) {
                     const entity = fork.right.inner.entities[0]!;
 
-                    this.windows.with(entity, sibling => sibling.request_activate());
+                    this.windows.get(entity)?.request_activate();
                 }
             }
         }
@@ -602,7 +579,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         if (this.gnome_forest && stack !== null) {
             const stack_object = this.gnome_forest.forest.stacks.get(stack);
             const prev = this.focus_history.current;
-            if (stack_object && prev) {
+            if (stack_object && prev !== null) {
                 const prev_window = this.windows.get(prev);
                 if (prev_window) {
                     if (prev_window.stack !== stack) {
@@ -612,22 +589,27 @@ export class Ext extends Ecs.System<ExtEvent> {
                 }
             } else if (
                 !stack_object
-                && prev
-                && this.windows.contains(prev)
+                && prev !== null
+                && this.windows.has(prev)
                 && stack_node?.kind === node.NodeKind.STACK
             ) {
                 // The stack dissolved, leaving just this window
                 const remaining = stack_node.entities[0];
-                if (remaining && !Ecs.entity_eq(remaining, win) && !Ecs.entity_eq(remaining, prev)) {
+                if (remaining !== undefined && remaining !== win && remaining !== prev) {
                     this.focus_history.restart_from(remaining);
                     this.windows.get(remaining)?.request_activate();
                 }
             }
         }
 
-        this.movements.remove(win);
-        this.windows.remove(win);
-        this.delete_entity(win);
+        this.forget_window(win);
+    }
+
+    /** Drops everything that Ext keeps about a window */
+    private forget_window(win: WindowId) {
+        this.movements.delete(win);
+        this.snapped.delete(win);
+        this.windows.delete(win);
     }
 
     /** Triggered when a window has been focused */
@@ -693,22 +675,20 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     /** Remembers where a window was before it was first tiled, to put it back there when it's untiled */
-    on_tile_attach(window: Entity) {
-        this.windows.with(window, w => {
-            if (w.prev_rect === null) {
-                w.prev_rect = w.meta.get_frame_rect();
-            }
-        });
+    on_tile_attach(window: WindowId) {
+        const w = this.windows.get(window);
+        if (w && w.prev_rect === null) {
+            w.prev_rect = w.meta.get_frame_rect();
+        }
     }
 
-    on_tile_detach(win: Entity) {
+    on_tile_detach(win: WindowId) {
         if (!this.settings.get_untile_reset_windows()) return;
-        this.windows.with(win, window => {
-            if (window.prev_rect && !window.ignore_detach) {
-                this.register(Events.window_move(this, window, window.prev_rect));
-                window.prev_rect = null;
-            }
-        });
+        const window = this.windows.get(win);
+        if (window?.prev_rect && !window.ignore_detach) {
+            this.register(Events.window_move(this, window, window.prev_rect));
+            window.prev_rect = null;
+        }
     }
 
     show_border_on_focused() {
@@ -749,15 +729,10 @@ export class Ext extends Ecs.System<ExtEvent> {
             const mon = win.monitor_id();
             const work = win.workspace_id();
 
-            for (const [, compare] of this.windows.iter()) {
+            for (const compare of this.windows.values()) {
                 const is_same_space = compare.monitor_id() === mon && compare.workspace_id() === work;
 
-                if (
-                    is_same_space
-                    && !compare.floating
-                    && compare.is_maximized()
-                    && win.entity[0] !== compare.entity[0]
-                ) {
+                if (is_same_space && !compare.floating && compare.is_maximized() && win.entity !== compare.entity) {
                     compare.meta.unmaximize();
                 }
             }
@@ -878,7 +853,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         if (is_new_window) {
             win.dont_animate_next_movement();
             actor.connect('first-frame', () => {
-                if (!this.movements.contains(win.entity)) win.maybe_animate_next_movement();
+                if (!this.movements.has(win.entity)) win.maybe_animate_next_movement();
             });
         }
 
@@ -896,12 +871,9 @@ export class Ext extends Ecs.System<ExtEvent> {
         );
 
         // Disconnect any preexisting signals
-        this.window_signals.take_with(win.entity, signals => {
-            for (const signal of signals) {
-                win.meta.disconnect(signal);
-            }
-        });
-        this.tilable_window_signals.remove(win.entity);
+        for (const signal of win.signals) win.meta.disconnect(signal);
+        win.signals = [];
+        win.tilable_signals = [];
         win.was_tilable = false;
 
         // Connect window signals
@@ -942,7 +914,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         // Fix phantom apps in dash
         const to_delete = [];
-        for (const [entity, window] of this.windows.iter()) {
+        for (const [entity, window] of this.windows) {
             if (window.actor_exists()) continue;
 
             if (this.gnome_forest) {
@@ -952,7 +924,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             }
         }
 
-        for (const entity of to_delete) this.delete_entity(entity);
+        for (const entity of to_delete) this.forget_window(entity);
     }
 
     restack() {
@@ -1090,7 +1062,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         // Re-focus a window that was unfocused.
                         let window: Window.MutterWindowHandle | null = null;
                         for (const entity of this.focus_history.recent()) {
-                            window = this.windows.get(entity);
+                            window = this.windows.get(entity) ?? null;
                             if (window) break;
                         }
 
@@ -1202,14 +1174,11 @@ export class Ext extends Ecs.System<ExtEvent> {
     signals_remove() {
         this.signals.disconnect_all();
 
-        this.window_signals.clear_with((entity, signals) => {
-            const win = this.windows.get(entity);
-            if (!win) return;
-            for (const signal of signals) {
-                win.meta.disconnect(signal);
-            }
-        });
-        this.tilable_window_signals.clear();
+        for (const win of this.windows.values()) {
+            for (const signal of win.signals) win.meta.disconnect(signal);
+            win.signals = [];
+            win.tilable_signals = [];
+        }
 
         for (const [_meta, tag] of this.size_requests) {
             GLib.source_remove(tag);
@@ -1271,11 +1240,11 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Calls a function once windows are no longer queued for movement. */
     when_movements_empty(func: () => void) {
-        if (this.movements.is_empty()) {
+        if (this.movements.size === 0) {
             return func();
         }
         const source = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 20, () => {
-            if (this.movements.is_empty()) {
+            if (this.movements.size === 0) {
                 func();
                 this.timeouts.delete(source);
                 return GLib.SOURCE_REMOVE;
@@ -1390,7 +1359,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         // Each tiled window's monitor before, which is its tree's, and now
         const placements = function* (ext: Ext): Generator<[MonitorID, MonitorID]> {
-            for (const [entity, w] of ext.windows.iter()) {
+            for (const [entity, w] of ext.windows) {
                 if (!w.actor_exists() || !ext.gnome_forest?.attached.contains(entity)) continue;
 
                 yield [ext.placement(w)[0], w.monitor_id()];
@@ -1459,12 +1428,9 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     /** Fetches the window entity which is associated with the metacity window metadata. */
-    private window_entity(meta: Meta.Window): Entity | null {
-        const id = meta.get_stable_sequence();
-
-        // Locate the window entity with the matching ID
-        let entity = this.ids.find(comp => comp == id).next().value ?? undefined;
-        if (entity) return entity;
+    private window_entity(meta: Meta.Window): WindowId | null {
+        const entity = meta.get_stable_sequence();
+        if (this.windows.has(entity)) return entity;
 
         // If not found, create a new entity with a MutterWindowHandle component.
         const actor = meta.get_compositor_private<Meta.WindowActor | null>();
@@ -1482,20 +1448,14 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const window_app = Window.window_tracker.get_window_app(meta) as Shell.App | null;
         if (!window_app) return null;
-        const name = window_app.get_name().replace(/&/g, '&amp;');
-
-        entity = this.create_entity();
-        this.ids.insert(entity, id);
-        this.names.insert(entity, name);
 
         const win = new Window.MutterWindowHandle(entity, meta, window_app, this);
-        this.windows.insert(entity, win);
+        this.windows.set(entity, win);
 
         const grab_focus = () => {
             this.when_movements_empty(() => {
-                this.windows.with(entity, window => {
-                    this.register_fn(() => window.request_activate(false));
-                });
+                const window = this.windows.get(entity);
+                if (window) this.register_fn(() => window.request_activate(false));
             });
         };
 
