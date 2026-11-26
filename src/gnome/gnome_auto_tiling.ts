@@ -16,12 +16,7 @@ export class GnomeAutoTiling {
     /** An auto-tiler over a new, empty forest */
     private create(): GnomeForest {
         const { ext } = this;
-        return new GnomeForest(
-            ext,
-            new Forest()
-                .connect_on_attach(ext.on_tile_attach.bind(ext))
-                .connect_on_detach(ext.on_tile_detach.bind(ext)),
-        );
+        return new GnomeForest(ext, new Forest());
     }
 
     /** Turns auto-tiling back on at startup if the setting says so */

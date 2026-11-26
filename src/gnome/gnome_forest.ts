@@ -124,7 +124,7 @@ export class GnomeForest {
         }
 
         const [, fork] = this.forest.create_toplevel(win, rect.copy(), workspace_id);
-        this.forest.on_attach(win.entity);
+        this.ext.remember_place(win.entity);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
 
@@ -141,6 +141,7 @@ export class GnomeForest {
         const attached = this.forest.attach_window(this.ext, attachee, attacher, move_by, stack_from_left);
 
         if (attached) {
+            this.ext.remember_place(attacher.entity);
             const [, fork] = attached;
             const monitor = this.ext.monitors.get(attachee.entity);
             if (monitor) {
@@ -210,10 +211,10 @@ export class GnomeForest {
         for (const [, [fent]] of this.forest.toplevel) {
             for (const node of this.forest.iter(fent)) {
                 if (node.inner.kind === NodeKind.WINDOW) {
-                    this.forest.on_detach(node.inner.window.entity);
+                    this.ext.restore_place(node.inner.window.entity);
                 } else if (node.inner.kind === NodeKind.STACK) {
                     for (const window of node.inner.windows) {
-                        this.forest.on_detach(window.entity);
+                        this.ext.restore_place(window.entity);
                     }
                 }
             }
@@ -236,6 +237,7 @@ export class GnomeForest {
         const prev_fork = this.ext.windows.get(win)?.leaf?.parent?.entity ?? null;
         if (prev_fork) {
             const reflow_fork = this.forest.detach(this.ext, prev_fork, win);
+            this.ext.restore_place(win);
 
             if (reflow_fork) {
                 const fork = reflow_fork[1];

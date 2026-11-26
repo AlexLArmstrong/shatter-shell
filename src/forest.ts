@@ -70,12 +70,6 @@ export class Forest extends Ecs.World {
 
     stacks: arena.Arena<Stack> = new Arena();
 
-    /** The callback to execute when a window starts being tiled */
-    on_attach: (window: Entity) => void = () => {};
-
-    /** Likewise for detachments */
-    on_detach: (child: Entity) => void = () => {};
-
     measure(ext: Ext, fork: Fork.Fork, area: Mtk.Rectangle) {
         fork.measure(this, ext, area, this.on_record());
     }
@@ -148,8 +142,6 @@ export class Forest extends Ecs.World {
 
             fork.right = node;
         }
-
-        this.on_attach(window.entity);
     }
 
     attach_stack(
@@ -166,8 +158,6 @@ export class Forest extends Ecs.World {
                 window.stack = stack.idx;
 
                 Node.stack_add(stack, window, !stack_from_left);
-
-                this.on_attach(new_entity);
 
                 ext.gnome_forest?.update_stack(stack);
 
@@ -247,7 +237,6 @@ export class Forest extends Ecs.World {
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
 
-            this.on_attach(new_entity);
             return [entity, fork];
         };
 
@@ -265,7 +254,6 @@ export class Forest extends Ecs.World {
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
 
-            this.on_attach(new_entity);
             return [entity, fork];
         };
 
@@ -287,7 +275,6 @@ export class Forest extends Ecs.World {
                     place_by_keyboard(fork, place_by.src, left, right);
                 }
 
-                this.on_attach(new_entity);
                 return [entity, fork];
             }
         } else if (fork.left.is_in_stack(onto_entity)) {
@@ -303,16 +290,6 @@ export class Forest extends Ecs.World {
         }
 
         return null;
-    }
-
-    connect_on_attach(callback: (window: Entity) => void): this {
-        this.on_attach = callback;
-        return this;
-    }
-
-    connect_on_detach(callback: (child: Entity) => void): this {
-        this.on_detach = callback;
-        return this;
     }
 
     /** Creates a new fork entity in the world */
@@ -466,8 +443,6 @@ export class Forest extends Ecs.World {
         if (stack_detach) {
             ext.windows.with(window, w => (w.stack = null));
         }
-
-        this.on_detach(window);
 
         if (reflow_fork && !stack_detach) {
             reflow_fork[1].rebalance_orientation();

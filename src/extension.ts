@@ -703,7 +703,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    on_tile_attach(window: Entity) {
+    remember_place(window: Entity) {
         this.windows.with(window, w => {
             if (w.prev_rect === null) {
                 w.prev_rect = w.meta.get_frame_rect();
@@ -711,7 +711,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
     }
 
-    on_tile_detach(win: Entity) {
+    restore_place(win: Entity) {
         if (!this.settings.get_untile_reset_windows()) return;
         this.windows.with(win, window => {
             if (window.prev_rect && !window.ignore_detach) {
@@ -838,6 +838,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                     if (fork) {
                         if (typeof attachment === 'boolean') {
                             gnome_forest.forest.attach_fork(this, fork, win, attachment);
+                            this.remember_place(win.entity);
                             gnome_forest.tile(fork, fork.area);
                             return;
                         } else {
@@ -850,7 +851,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                                     win.stack = attachment;
                                     node.stack_add(leaf, win);
                                     gnome_forest.update_stack(leaf);
-                                    gnome_forest.forest.on_attach(win.entity);
+                                    this.remember_place(win.entity);
                                     stack.activate(win.entity);
                                     gnome_forest.tile(fork, fork.area);
                                     return;
