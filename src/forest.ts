@@ -159,7 +159,7 @@ export class Forest extends Ecs.World {
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
-                Node.stack_insert(ext.gnome_forest, stack, window, stack_from_left);
+                stack.insert(ext.gnome_forest, window, stack_from_left);
 
                 if (window.meta.has_focus()) {
                     container.activate(new_entity);
@@ -378,7 +378,7 @@ export class Forest extends Ecs.World {
         if (branch?.is_leaf() && branch.inner.windows.length > 1) {
             reflow_fork = [fork_entity, fork];
             stack_detach = true;
-            Node.stack_remove(tabs, branch.inner, window);
+            branch.inner.remove(tabs, window);
         } else if (branch?.is_leaf()) {
             if (branch.inner.idx !== null) this.stacks.remove(branch.inner.idx)?.destroy();
 

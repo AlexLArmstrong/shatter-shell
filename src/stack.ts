@@ -7,7 +7,6 @@ import type * as Settings from './settings.js';
 import * as a from './arena.js';
 import * as Ecs from './ecs.js';
 import { workspaceID } from './lib.js';
-import * as Node from './node.js';
 
 const Arena = a.Arena;
 import Atk from 'gi://Atk';
@@ -249,7 +248,7 @@ export class Stack {
     }
 
     activate(entity: Entity) {
-        Node.stack_activate(this.ext.gnome_forest, this.node, entity);
+        this.node.activate(this.ext.gnome_forest, entity);
     }
 
     private show_active() {

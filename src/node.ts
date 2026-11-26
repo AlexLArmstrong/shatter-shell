@@ -20,131 +20,137 @@ export interface NodeFork {
     parent: Fork | null;
 }
 
-export interface NodeLeaf {
-    kind: NodeKind.LEAF;
-    tabbed: boolean;
-    idx: number | null;
-    windows: Array<MutterWindowHandle>;
-    active: MutterWindowHandle;
-    prev_active: MutterWindowHandle | null;
-    rect: Mtk.Rectangle | null;
-    parent: Fork | null;
-}
-
-/*
- * A stack's windows, their order, and which of them is active only change through the functions
- * below, which draw the stack again before they return.
- */
-
 export interface TabBars {
     update_stack(stack: NodeLeaf): void;
 }
 
-function sync_tabs(tabs: TabBars | null, node: NodeLeaf) {
-    tabs?.update_stack(node);
-}
+export class NodeLeaf {
+    readonly kind: NodeKind.LEAF = NodeKind.LEAF;
+    tabbed = false;
+    idx: number | null = null;
+    rect: Mtk.Rectangle | null = null;
+    parent: Fork | null = null;
 
-export function stack_find(node: NodeLeaf, entity: Entity) {
-    const idx = node.windows.findIndex(other => Ecs.entity_eq(entity, other.entity));
-    return idx === -1 ? null : idx;
-}
+    private readonly _windows: Array<MutterWindowHandle>;
+    private _active: MutterWindowHandle;
+    private _prev_active: MutterWindowHandle | null = null;
 
-export function stack_activate(tabs: TabBars | null, node: NodeLeaf, entity: Entity) {
-    const idx = stack_find(node, entity);
-    const window = idx === null ? undefined : node.windows[idx];
-    if (!window) return;
-
-    if (node.active !== window) {
-        node.prev_active = node.active;
-        node.active = window;
+    constructor(window: MutterWindowHandle) {
+        this._windows = [window];
+        this._active = window;
     }
 
-    sync_tabs(tabs, node);
-}
-
-export function stack_insert(tabs: TabBars | null, node: NodeLeaf, window: MutterWindowHandle, at_end: boolean) {
-    if (at_end) {
-        node.windows.push(window);
-    } else {
-        node.windows.unshift(window);
-    }
-    node.parent?.hold_window(node, window);
-
-    sync_tabs(tabs, node);
-}
-
-/** Removes a window from a stack */
-export function stack_remove(tabs: TabBars | null, node: NodeLeaf, entity: Entity): number | null {
-    const idx = stack_find(node, entity);
-    if (idx === null) return null;
-
-    const [window] = node.windows.splice(idx, 1);
-    if (!window) return null;
-    node.parent?.let_go_window(node, window);
-
-    if (node.prev_active === window) node.prev_active = null;
-
-    if (node.active === window) {
-        const next = node.prev_active ?? node.windows[Math.min(idx, node.windows.length - 1)];
-        if (next) node.active = next;
-        node.prev_active = null;
+    get windows(): ReadonlyArray<MutterWindowHandle> {
+        return this._windows;
     }
 
-    sync_tabs(tabs, node);
-    return idx;
-}
-
-export function stack_replace(tabs: TabBars | null, node: NodeLeaf, old: Entity, window: MutterWindowHandle) {
-    const idx = stack_find(node, old);
-    const previous = idx === null ? undefined : node.windows[idx];
-    if (idx === null || !previous) return;
-
-    node.windows[idx] = window;
-    node.parent?.hold_window(node, window);
-    // A window that replaced itself stays linked
-    if (stack_find(node, old) === null) node.parent?.let_go_window(node, previous);
-    if (node.active === previous) node.active = window;
-    if (node.prev_active === previous) node.prev_active = window;
-
-    sync_tabs(tabs, node);
-}
-
-function stack_swap(tabs: TabBars | null, node: NodeLeaf, from: number, to: number) {
-    const a = node.windows[from];
-    const b = node.windows[to];
-    if (a === undefined || b === undefined) return;
-
-    node.windows[from] = b;
-    node.windows[to] = a;
-    sync_tabs(tabs, node);
-}
-
-/** Move the window in a stack to the left, and detach if it it as the end. */
-export function stack_move_left(tabs: TabBars | null, node: NodeLeaf, entity: Entity): boolean {
-    const idx = stack_find(node, entity);
-    if (idx === null) return false;
-
-    if (idx === 0) {
-        stack_remove(tabs, node, entity);
-        return false;
+    get active(): MutterWindowHandle {
+        return this._active;
     }
 
-    stack_swap(tabs, node, idx - 1, idx);
-    return true;
-}
-
-/** Move the window in a stack to the right, and detach if it is at the end. */
-export function stack_move_right(tabs: TabBars | null, node: NodeLeaf, entity: Entity): boolean {
-    const idx = stack_find(node, entity);
-    if (idx === null) return false;
-
-    if (idx === node.windows.length - 1) {
-        stack_remove(tabs, node, entity);
-        return false;
+    get prev_active(): MutterWindowHandle | null {
+        return this._prev_active;
     }
 
-    stack_swap(tabs, node, idx + 1, idx);
-    return true;
+    find(entity: Entity): number | null {
+        const idx = this._windows.findIndex(other => Ecs.entity_eq(entity, other.entity));
+        return idx === -1 ? null : idx;
+    }
+
+    activate(tabs: TabBars | null, entity: Entity) {
+        const idx = this.find(entity);
+        const window = idx === null ? undefined : this._windows[idx];
+        if (!window) return;
+
+        if (this._active !== window) {
+            this._prev_active = this._active;
+            this._active = window;
+        }
+
+        tabs?.update_stack(this);
+    }
+
+    insert(tabs: TabBars | null, window: MutterWindowHandle, at_end: boolean) {
+        if (at_end) {
+            this._windows.push(window);
+        } else {
+            this._windows.unshift(window);
+        }
+        this.parent?.hold_window(this, window);
+
+        tabs?.update_stack(this);
+    }
+
+    remove(tabs: TabBars | null, entity: Entity): number | null {
+        const idx = this.find(entity);
+        if (idx === null) return null;
+
+        const [window] = this._windows.splice(idx, 1);
+        if (!window) return null;
+        this.parent?.let_go_window(this, window);
+
+        if (this._prev_active === window) this._prev_active = null;
+
+        if (this._active === window) {
+            const next = this._prev_active ?? this._windows[Math.min(idx, this._windows.length - 1)];
+            if (next) this._active = next;
+            this._prev_active = null;
+        }
+
+        tabs?.update_stack(this);
+        return idx;
+    }
+
+    replace(tabs: TabBars | null, old: Entity, window: MutterWindowHandle) {
+        const idx = this.find(old);
+        const previous = idx === null ? undefined : this._windows[idx];
+        if (idx === null || !previous) return;
+
+        this._windows[idx] = window;
+        this.parent?.hold_window(this, window);
+        // A window that replaced itself stays linked
+        if (this.find(old) === null) this.parent?.let_go_window(this, previous);
+        if (this._active === previous) this._active = window;
+        if (this._prev_active === previous) this._prev_active = window;
+
+        tabs?.update_stack(this);
+    }
+
+    move_left(tabs: TabBars | null, entity: Entity): boolean {
+        const idx = this.find(entity);
+        if (idx === null) return false;
+
+        if (idx === 0) {
+            this.remove(tabs, entity);
+            return false;
+        }
+
+        this.swap(tabs, idx - 1, idx);
+        return true;
+    }
+
+    move_right(tabs: TabBars | null, entity: Entity): boolean {
+        const idx = this.find(entity);
+        if (idx === null) return false;
+
+        if (idx === this._windows.length - 1) {
+            this.remove(tabs, entity);
+            return false;
+        }
+
+        this.swap(tabs, idx + 1, idx);
+        return true;
+    }
+
+    private swap(tabs: TabBars | null, from: number, to: number) {
+        const a = this._windows[from];
+        const b = this._windows[to];
+        if (a === undefined || b === undefined) return;
+
+        this._windows[from] = b;
+        this._windows[to] = a;
+        tabs?.update_stack(this);
+    }
 }
 
 export type NodeADT = NodeFork | NodeLeaf;
@@ -164,16 +170,7 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     static window(window: MutterWindowHandle): Node<NodeLeaf> {
-        return new Node({
-            kind: NodeKind.LEAF,
-            tabbed: false,
-            idx: null,
-            windows: [window],
-            active: window,
-            prev_active: null,
-            rect: null,
-            parent: null,
-        });
+        return new Node(new NodeLeaf(window));
     }
 
     is_leaf(): this is Node<NodeLeaf> {

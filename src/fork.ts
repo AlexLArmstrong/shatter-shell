@@ -186,7 +186,7 @@ export class Fork {
         if (!branch?.is_leaf()) return null;
 
         const leaf = branch.inner;
-        return () => node.stack_replace(tabs, leaf, a.entity, b);
+        return () => leaf.replace(tabs, a.entity, b);
     }
 
     /** Sets a new area for this fork */
@@ -392,7 +392,7 @@ function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
 }
 
 /** Gets the stack's minimum size based on its windows and the tab bar. */
-function stack_minimum_size(ext: Ext, windows: MutterWindowHandle[]): [number, number] {
+function stack_minimum_size(ext: Ext, windows: ReadonlyArray<MutterWindowHandle>): [number, number] {
     let width = 0;
     let height = 0;
     for (const window of windows) {

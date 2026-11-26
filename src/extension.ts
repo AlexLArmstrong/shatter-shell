@@ -840,7 +840,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                                     const stack_node: node.NodeLeaf = stack_info[1].inner;
 
                                     this.remember_place(win.entity);
-                                    node.stack_insert(gnome_forest, stack_node, win, true);
+                                    stack_node.insert(gnome_forest, win, true);
                                     stack.activate(win.entity);
                                     gnome_forest.tile(fork, fork.area);
                                     return;
