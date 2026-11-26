@@ -425,7 +425,7 @@ export class GnomeTilingMode {
         callback: (m: Mtk.Rectangle, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
     ) {
         if (this.ext.gnome_forest && this.window) {
-            const entity = this.ext.gnome_forest.attached.get(this.window);
+            const entity = this.ext.windows.get(this.window)?.leaf?.parent?.entity ?? null;
             if (entity) {
                 const fork = this.ext.gnome_forest.forest.forks.get(entity);
                 const window = this.ext.windows.get(this.window);

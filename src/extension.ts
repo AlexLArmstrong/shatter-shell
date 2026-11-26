@@ -262,7 +262,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                     case WindowEventType.Fullscreen:
                         if (this.gnome_forest) {
-                            const attachment = this.gnome_forest.attached.get(win.entity);
+                            const attachment = win.leaf?.parent?.entity ?? null;
                             if (attachment) {
                                 if (!win.meta.is_fullscreen()) {
                                     const fork = this.gnome_forest.forest.forks.get(win.entity);
@@ -412,12 +412,8 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         // Workspaces used by the monitor's tiled windows that aren't being moved
         const occupied: WorkspaceID[] = [];
-        for (const [entity] of this.gnome_forest.attached.iter()) {
-            if (!this.gnome_forest.attached.contains(entity)) continue;
-
-            const win = this.windows.get(entity);
-
-            if (win && !win.reassignment && win.monitor_id() === monitor) occupied.push(win.workspace_id());
+        for (const win of this.windows.values()) {
+            if (win.leaf && !win.reassignment && win.monitor_id() === monitor) occupied.push(win.workspace_id());
         }
 
         let id = lowest_unused_workspace(occupied);
@@ -590,7 +586,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         if (this.gnome_forest) {
-            const entity = this.gnome_forest.attached.get(win);
+            const entity = window.leaf?.parent?.entity ?? null;
             if (entity) {
                 const fork = this.gnome_forest.forest.forks.get(entity);
                 if (fork?.right && fork.right.is_window(win)) {
@@ -668,7 +664,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         const previous = this.focus_history.previous;
         if (this.gnome_forest && win.is_tilable() && previous !== null) {
             const prev = this.windows.get(previous);
-            const is_attached = this.gnome_forest.attached.contains(previous);
+            const is_attached = (prev?.leaf ?? null) !== null;
 
             if (
                 prev
@@ -700,7 +696,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 + `  stack: ${win.stack},\n`;
 
             if (this.gnome_forest) {
-                msg += `  fork: (${this.gnome_forest.attached.get(win.entity)}),\n`;
+                msg += `  fork: (${win.leaf?.parent?.entity ?? null}),\n`;
             }
 
             Log.debug(msg + '}');
@@ -800,7 +796,7 @@ export class Ext extends Ecs.System<ExtEvent> {
             // Retile on unmaximize after waiting for other events to complete, such as animations
             this.register_fn(() => {
                 if (this.gnome_forest) {
-                    const fork_ent = this.gnome_forest.attached.get(win.entity);
+                    const fork_ent = win.leaf?.parent?.entity ?? null;
                     if (fork_ent) {
                         const fork = this.gnome_forest.forest.forks.get(fork_ent);
                         if (fork) this.gnome_forest.tile(fork, fork.area);
@@ -822,7 +818,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         if (this.gnome_forest) {
             if (win.meta.minimized) {
-                const attached = this.gnome_forest.attached.get(win.entity);
+                const attached = win.leaf?.parent?.entity ?? null;
                 if (!attached) return;
 
                 const fork = this.gnome_forest.forest.forks.get(attached);
