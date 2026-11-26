@@ -155,9 +155,7 @@ export class Forest extends Ecs.World {
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
-                Node.stack_add(stack, window, !stack_from_left);
-
-                ext.gnome_forest?.update_stack(stack);
+                Node.stack_insert(ext.gnome_forest, stack, window, stack_from_left);
 
                 if (window.meta.has_focus()) {
                     container.activate(new_entity);
@@ -360,7 +358,7 @@ export class Forest extends Ecs.World {
     }
 
     /** Detaches an entity from the a fork, re-arranging the fork's tree as necessary */
-    detach(ext: Ext, fork_entity: Entity, window: Entity): [Entity, Fork.Fork] | null {
+    detach(tabs: Node.TabBars | null, fork_entity: Entity, window: Entity): [Entity, Fork.Fork] | null {
         const fork = this.forks.get(fork_entity);
         if (!fork) return null;
 
@@ -394,7 +392,7 @@ export class Forest extends Ecs.World {
             reflow_fork = [fork_entity, fork];
             stack_detach = true;
 
-            this.remove_from_stack(ext, fork.left.inner, window, () => {
+            this.remove_from_stack(tabs, fork.left.inner, window, () => {
                 if (fork.right) {
                     fork.left = fork.right;
                     fork.right = null;
@@ -431,7 +429,7 @@ export class Forest extends Ecs.World {
                 reflow_fork = [fork_entity, fork];
                 stack_detach = true;
 
-                this.remove_from_stack(ext, fork.right.inner, window, () => {
+                this.remove_from_stack(tabs, fork.right.inner, window, () => {
                     fork.right = null;
                     this.reassign_to_parent(fork, fork.left);
                 });
@@ -652,15 +650,12 @@ export class Forest extends Ecs.World {
     }
 
     /** Removes window from stack, destroying the stack if it was the last window. */
-    private remove_from_stack(ext: Ext, stack: Node.NodeStack, window: Entity, on_last: () => void) {
+    private remove_from_stack(tabs: Node.TabBars | null, stack: Node.NodeStack, window: Entity, on_last: () => void) {
         if (stack.windows.length === 1) {
             this.stacks.remove(stack.idx)?.destroy();
             on_last();
         } else {
-            const s = this.stacks.get(stack.idx);
-            if (s) {
-                Node.stack_remove(this, stack, window);
-            }
+            Node.stack_remove(tabs, stack, window);
         }
     }
 

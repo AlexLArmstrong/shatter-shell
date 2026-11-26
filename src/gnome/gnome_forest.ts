@@ -55,8 +55,6 @@ export class GnomeForest {
                 a = stack.active;
                 a_win = this.ext.windows.get(a);
                 if (!a_win) return;
-
-                stack.deactivate(a_win);
             }
         }
 
@@ -66,14 +64,12 @@ export class GnomeForest {
                 b = stack.active;
                 b_win = this.ext.windows.get(b);
                 if (!b_win) return;
-
-                stack.deactivate(b_win);
             }
         }
 
-        const a_fn = a_fork.replace_window(this.ext, a_win, b_win);
+        const a_fn = a_fork.replace_window(this, a_win, b_win);
 
-        const b_fn = b_fork.replace_window(this.ext, b_win, a_win);
+        const b_fn = b_fork.replace_window(this, b_win, a_win);
 
         if (a_fn) a_fn();
         if (b_fn) b_fn();
@@ -226,7 +222,7 @@ export class GnomeForest {
 
         const prev_fork = this.ext.windows.get(win)?.leaf?.parent?.entity ?? null;
         if (prev_fork) {
-            const reflow_fork = this.forest.detach(this.ext, prev_fork, win);
+            const reflow_fork = this.forest.detach(this, prev_fork, win);
             this.ext.restore_place(win);
 
             if (reflow_fork) {
@@ -614,22 +610,11 @@ export class GnomeForest {
     }
 
     update_stack(stack: node.NodeStack) {
-        if (stack.rect) {
-            const container = this.forest.stacks.get(stack.idx);
-            if (container) {
-                container.clear();
+        const container = this.forest.stacks.get(stack.idx);
+        if (!container) return;
 
-                // Collect names of each entity in the stack
-                for (const window of stack.windows) {
-                    container.add(window);
-                }
-
-                container.update_positions(stack.rect);
-                container.auto_activate();
-            }
-        } else {
-            Log.warn('stack rect was null');
-        }
+        container.sync();
+        if (stack.rect) container.update_positions(stack.rect);
     }
 
     windows_are_siblings(a: Entity, b: Entity): Entity | null {
