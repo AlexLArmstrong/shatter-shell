@@ -6,7 +6,6 @@ import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
 import * as Ecs from './ecs.js';
-import { workspaceID } from './lib.js';
 
 const Arena = a.Arena;
 import Atk from 'gi://Atk';
@@ -148,9 +147,6 @@ export class Stack {
 
     tabs: Array<Tab> = [];
 
-    /** The workspace that the stack was created on, for until its active window has one. */
-    private initial_workspace: WorkspaceID;
-
     buttons: a.Arena<typeof TabButton.prototype> = new Arena();
 
     tab_height: number;
@@ -168,10 +164,9 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, node: NodeLeaf, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeLeaf) {
         this.ext = ext;
         this.node = node;
-        this.initial_workspace = workspace;
         this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.sizes.scale;
         this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.sizes.scale;
 
@@ -356,7 +351,8 @@ export class Stack {
         const window = this.ext.windows.get(c.entity);
         if (window) {
             for (const s of c.signals) window.meta.disconnect(s);
-            if (this.workspace === this.ext.active_workspace()) window.visibility.fade_in();
+            const active = global.workspace_manager.get_active_workspace();
+            if (this.active_meta()?.get_workspace() === active) window.visibility.fade_in();
         }
 
         c.signals = [];
@@ -379,7 +375,8 @@ export class Stack {
         // Disconnect stack signals from each window, and unhide them.
         for (const c of this.tabs) {
             this.tab_disconnect(c);
-            if (this.workspace === this.ext.active_workspace()) this.ext.windows.get(c.entity)?.visibility.fade_in();
+            const active = global.workspace_manager.get_active_workspace();
+            if (this.active_meta()?.get_workspace() === active) this.ext.windows.get(c.entity)?.visibility.fade_in();
         }
 
         for (const b of this.buttons.values()) {
@@ -477,16 +474,11 @@ export class Stack {
         }
     }
 
-    get workspace(): WorkspaceID {
-        const workspace = this.active_meta()?.get_workspace();
-        return workspace ? workspaceID(workspace.index()) : this.initial_workspace;
-    }
-
     /** Whether the stack is permitted to show on the active workspace. */
     permitted_to_show(): boolean {
         const active = global.workspace_manager.get_active_workspace();
         const window = this.active_meta();
-        return window ? window.located_on_workspace(active) : this.workspace === active.index();
+        return window?.located_on_workspace(active) ?? false;
     }
 
     reset_visibility(permitted: boolean) {

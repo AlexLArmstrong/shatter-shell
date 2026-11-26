@@ -4,6 +4,7 @@ import type { Entity } from './ecs.js';
 import type { ExtEvent } from './events.js';
 import type { GnomeForest } from './gnome/gnome_forest.js';
 import type { Indicator } from './panel_settings.js';
+import type { Tree } from './tree.js';
 
 import * as Config from './config.js';
 import * as Ecs from './ecs.js';
@@ -11,7 +12,6 @@ import * as Events from './events.js';
 import * as Executor from './executor.js';
 import * as exec from './executor.js';
 import * as Focus from './focus.js';
-import { Fork } from './fork.js';
 import { GnomeGrab } from './gnome/gnome_grab.js';
 import { GnomeSizes } from './gnome/gnome_sizes.js';
 import { GnomeTilingMode } from './gnome/gnome_tiling_mode.js';
@@ -140,9 +140,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Store for stable sequences of each registered window */
     ids: Ecs.Storage<number> = this.register_storage();
 
-    /** Store for keeping track of which monitor + workspace a window is on */
-    monitors: Ecs.Storage<MonitorWorkspaceID> = this.register_storage();
-
     /** Stores movements that have been queued */
     movements: Ecs.Storage<Mtk.Rectangle> = this.register_storage();
 
@@ -223,8 +220,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                 }
 
                 window.meta.move_resize_frame(false, movement.x, movement.y, movement.width, movement.height);
-
-                this.monitors.insert(window.entity, [window.monitor_id(), window.workspace_id()]);
 
                 if (window.activate_after_move) {
                     window.activate_after_move = false;
@@ -772,9 +767,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             const actor = win.meta.get_compositor_private<Meta.WindowActor | null>();
             if (actor) global.window_group.set_child_above_sibling(actor, null);
 
-            this.on_monitor_changed(win, (_cfrom, cto, workspace) => {
+            this.on_monitor_changed(win, () => {
                 win.ignore_detach = true;
-                this.monitors.insert(win.entity, [cto, workspace]);
                 this.gnome_forest?.detach_window(win.entity);
             });
         } else {
@@ -862,15 +856,10 @@ export class Ext extends Ecs.System<ExtEvent> {
     ) {
         const actual_monitor = win.monitor_id();
         const actual_workspace = win.workspace_id();
-        const monitor = this.monitors.get(win.entity);
+        const [expected_monitor, expected_workspace] = this.placement(win);
 
-        if (monitor) {
-            const [expected_monitor, expected_workspace] = monitor;
-            if (expected_monitor != actual_monitor || actual_workspace != expected_workspace) {
-                func(expected_monitor, actual_monitor, actual_workspace);
-            }
-        } else {
-            func(null, actual_monitor, actual_workspace);
+        if (expected_monitor != actual_monitor || actual_workspace != expected_workspace) {
+            func(expected_monitor, actual_monitor, actual_workspace);
         }
     }
 
@@ -925,10 +914,10 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_workspace_changed(win: Window.MutterWindowHandle) {
         if (this.gnome_forest && !this.contains_tag(win.entity, Tags.Floating)) {
             const id = this.workspace_id(win);
-            const prev_id = this.monitors.get(win.entity);
-            if (!prev_id || id[0] != prev_id[0] || id[1] != prev_id[1]) {
+            const [monitor, workspace] = this.placement(win);
+            const tiled = win.leaf !== null;
+            if (!tiled || id[0] != monitor || id[1] != workspace) {
                 win.ignore_detach = true;
-                this.monitors.insert(win.entity, id);
                 if (win.is_tilable()) {
                     this.gnome_forest.detach_window(win.entity);
                     this.gnome_forest.attach_to_workspace(win, id);
@@ -943,80 +932,22 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    on_workspace_index_changed(prev: WorkspaceID, next: WorkspaceID) {
-        this.on_workspace_modify(
-            current => current == prev,
-            () => next,
-        );
-    }
+    on_workspace_removed(_number: number) {
+        this.restack();
 
-    on_workspace_modify(
-        condition: (current: WorkspaceID) => boolean,
-        modify: (current: WorkspaceID) => WorkspaceID,
-        change_workspace: boolean = false,
-    ) {
-        function window_move(ext: Ext, entity: Entity, ws: WorkspaceID) {
-            if (change_workspace) {
-                const window = ext.windows.get(entity);
-                if (!window || !window.actor_exists() || window.meta.is_on_all_workspaces()) return;
+        // Fix phantom apps in dash
+        const to_delete = [];
+        for (const [entity, window] of this.windows.iter()) {
+            if (window.actor_exists()) continue;
 
-                ext.size_signals_block(window);
-                window.meta.change_workspace_by_index(ws, false);
-                ext.size_signals_unblock(window);
+            if (this.gnome_forest) {
+                this.gnome_forest.detach_window(entity);
+            } else {
+                to_delete.push(entity);
             }
         }
 
-        if (this.gnome_forest) {
-            for (const [entity, monitor] of this.gnome_forest.forest.toplevel.values()) {
-                if (condition(monitor[1])) {
-                    const value = modify(monitor[1]);
-                    monitor[1] = value;
-                    let fork = this.gnome_forest.forest.forks.get(entity);
-                    if (fork) {
-                        fork.workspace = value;
-                        for (const child of this.gnome_forest.forest.iter(entity)) {
-                            if (child.inner.kind === node.NodeKind.FORK) {
-                                child.inner.fork.workspace = value;
-                            } else if (child.is_leaf()) {
-                                for (const window of child.inner.windows) {
-                                    window_move(this, window.entity, value);
-                                }
-
-                                this.gnome_forest.forest.view_of(child.inner)?.restack();
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Fix phantom apps in dash
-            for (const window of this.windows.values()) {
-                if (!window.actor_exists()) this.gnome_forest.detach_window(window.entity);
-            }
-        } else {
-            const to_delete = [];
-
-            for (const [entity, window] of this.windows.iter()) {
-                if (!window.actor_exists()) {
-                    to_delete.push(entity);
-                    continue;
-                }
-
-                const ws = window.workspace_id();
-                if (condition(ws)) {
-                    window_move(this, entity, modify(ws));
-                }
-            }
-
-            for (const e of to_delete) this.delete_entity(e);
-        }
-    }
-
-    on_workspace_removed(number: number) {
-        this.on_workspace_modify(
-            current => current > number,
-            prev => workspaceID(prev - 1),
-        );
+        for (const entity of to_delete) this.delete_entity(entity);
     }
 
     restack() {
@@ -1057,20 +988,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         const workspace_manager = wom;
-
-        for (const [, ws] of iter_workspaces(workspace_manager)) {
-            let index = workspaceID(ws.index());
-
-            this.signals.connect_with(ws, () =>
-                ws.connect('notify::workspace-index', () => {
-                    if (ws !== null) {
-                        const new_index = workspaceID(ws.index());
-                        this.on_workspace_index_changed(index, new_index);
-                        index = new_index;
-                    }
-                }),
-            );
-        }
 
         this.signals.connect_with(display, () =>
             display.connect('workareas-changed', () => {
@@ -1422,25 +1339,24 @@ export class Ext extends Ecs.System<ExtEvent> {
         const update_tiling = () => {
             if (!this.gnome_forest) return;
 
-            for (const f of this.gnome_forest.forest.forks.values()) {
-                if (!f.is_toplevel) continue;
-
+            for (const { root: f } of this.gnome_forest.forest.trees) {
                 const area = this.monitor_work_area(f.monitor);
 
                 f.smart_gapped = false;
                 f.set_area(area.copy());
-                this.gnome_forest.update_toplevel(f, f.monitor, this.settings.get_smart_gaps());
+                this.gnome_forest.update_tree(f, f.monitor, this.settings.get_smart_gaps());
             }
         };
 
-        type Migration = MonitorMigration<Fork, MonitorID, Mtk.Rectangle>;
+        type Migration = MonitorMigration<Tree, MonitorID, Mtk.Rectangle>;
 
         const apply_migrations = (migrations: Migration[], claimed: Set<MonitorID>) => {
             if (!migrations.length) return;
 
             new exec.OnceExecutor<Migration, Migration[]>(migrations).start(
                 500,
-                ({ tree: fork, monitor, work_area, moved }) => {
+                ({ tree, monitor, work_area, moved }) => {
+                    const fork = tree.root;
                     const workspace = moved
                         ? workspace_on(monitor, claimed, monitor => this.find_unused_workspace(monitor)[0])
                         : fork.workspace;
@@ -1464,13 +1380,11 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const [old_primary, old_displays] = this.displays;
 
-        // Each window's monitor before and after the change
         const placements = function* (ext: Ext): Generator<[MonitorID, MonitorID]> {
-            for (const [entity, w] of ext.windows.iter()) {
-                if (!w.actor_exists()) continue;
+            for (const w of ext.windows.values()) {
+                if (!w.actor_exists() || w.leaf === null) continue;
 
-                const placement = ext.monitors.get(entity);
-                if (placement) yield [placement[0], w.monitor_id()];
+                yield [ext.placement(w)[0], w.monitor_id()];
             }
         };
 
@@ -1518,12 +1432,11 @@ export class Ext extends Ecs.System<ExtEvent> {
             (() => {
                 if (!this.gnome_forest) return;
 
-                const toplevels = Array.from(forest.forks.values()).filter(f => f.is_toplevel);
-                const migrations = plan_migrations(toplevels, changes, this.displays[1]);
+                const migrations = plan_migrations(forest.trees, changes, this.displays[1]);
 
                 for (const migration of migrations) {
-                    if (migration.moved) migration.tree.workspace = 0;
-                    mark_for_reassignment(this, migration.tree.entity);
+                    if (migration.moved) migration.tree.root.workspace = 0;
+                    mark_for_reassignment(this, migration.tree.root.entity);
                 }
 
                 apply_migrations(migrations, unchanged_monitors(changes));
@@ -1568,7 +1481,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const win = new Window.MutterWindowHandle(entity, meta, window_app, this);
         this.windows.insert(entity, win);
-        this.monitors.insert(entity, [win.monitor_id(), win.workspace_id()]);
 
         const grab_focus = () => {
             this.when_movements_empty(() => {
@@ -1593,12 +1505,10 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Returns the tilable window(s) that the mouse pointer is currently hovering above. */
     *windows_at_pointer(cursor: Mtk.Rectangle, monitor: MonitorID, workspace: WorkspaceID) {
-        for (const entity of this.monitors.find(m => m[0] == monitor && m[1] == workspace)) {
-            const window = this.windows.with(entity, window => {
-                return window.is_tilable() && window.frame().contains_rect(cursor) ? window : null;
-            });
-
-            if (window) yield window;
+        for (const window of this.windows.values()) {
+            if (!window.actor_exists() || window.monitor_id() != monitor || window.workspace_id() != workspace)
+                continue;
+            if (window.is_tilable() && window.frame().contains_rect(cursor)) yield window;
         }
     }
 
@@ -1611,6 +1521,11 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Fetch a workspace by its index */
     workspace_by_id(id: WorkspaceID): Meta.Workspace | null {
         return wom.get_workspace_by_index(id);
+    }
+
+    placement(win: Window.MutterWindowHandle): MonitorWorkspaceID {
+        const fork = win.leaf?.parent;
+        return fork ? [fork.monitor, fork.workspace] : this.workspace_id(win);
     }
 
     workspace_id(window: Window.MutterWindowHandle | null = null): MonitorWorkspaceID {
@@ -1709,15 +1624,5 @@ export default class ShatterShellExtension extends Extension {
         }
 
         Log.settings = null;
-    }
-}
-
-function* iter_workspaces(manager: Meta.WorkspaceManager) {
-    let idx = 0;
-    let ws = manager.get_workspace_by_index(idx);
-    while (ws !== null) {
-        yield [idx, ws] as const;
-        idx += 1;
-        ws = manager.get_workspace_by_index(idx);
     }
 }

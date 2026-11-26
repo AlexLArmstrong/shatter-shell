@@ -106,10 +106,7 @@ export class GnomeGrab {
         const pointer = lib.cursor_rect();
         const kind = kind_of(op);
 
-        // The monitor and workspace that the window was last seen on
-        const seen = ext.monitors.get(win.entity);
-        if (kind === GrabKind.OverviewDrag && at && !seen) return;
-        const monitor = seen ? seen[0] : win.monitor_id();
+        const monitor = ext.placement(win)[0];
 
         const outcome = this.grab.end(win, {
             kind,
@@ -117,18 +114,11 @@ export class GnomeGrab {
             maximized: win.is_maximized(),
             auto_tiling: at !== null,
             in_tree: win.leaf !== null,
-            other_monitor: seen ? seen[0] !== win.monitor_id() : false,
+            other_monitor: monitor !== win.monitor_id(),
             pointer_in_work_area: win.meta.get_work_area_for_monitor(monitor).contains_rect(pointer),
             pointer: [pointer.x, pointer.y],
             snap_to_grid: ext.settings.get_snap_to_grid(),
         });
-
-        // A tiled window that was moved is now seen where it was dropped
-        const moved = outcome.kind === 'none' || outcome.kind === 'reflow' || outcome.kind === 'drop';
-        const move_op = kind === GrabKind.MouseMove || kind === GrabKind.KeyboardMove;
-        if (at && move_op && moved && !win.meta.minimized && !win.is_maximized()) {
-            ext.monitors.insert(win.entity, [win.monitor_id(), win.workspace_id()]);
-        }
 
         switch (outcome.kind) {
             case 'none':
@@ -179,15 +169,15 @@ export class GnomeGrab {
             crect.y -= tab_dimension;
         }
 
-        const top_level = forest.find_toplevel(ext.workspace_id());
-        if (top_level) {
-            geom.clamp(crect, forest.forks.get(top_level)!.area);
+        const tree = forest.find_tree(ext.workspace_id());
+        if (tree) {
+            geom.clamp(crect, tree.root.area);
         }
 
         const neighbour_rect = (side: EdgeSide) => ext.focus_selector.toward(ext, side, win)?.frame() ?? null;
         if (movement_is_valid(movement, win.frame(), neighbour_rect)) {
             forest.resize(ext, fork_entity, fork, win.entity, movement, crect);
-            forest.arrange(ext, fork.workspace);
+            forest.arrange(ext);
         } else {
             forest.tile(ext, fork, fork.area);
         }

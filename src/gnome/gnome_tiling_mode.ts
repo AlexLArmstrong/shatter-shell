@@ -178,7 +178,7 @@ export class GnomeTilingMode {
         if (!this.ext.gnome_forest) return null;
 
         const forest = this.ext.gnome_forest.forest;
-        const new_fork = forest.create_fork(left, right, fork.area, fork.workspace, fork.monitor);
+        const new_fork = forest.create_fork(left, right, fork.area, fork.tree);
 
         if (is_left) {
             fork.left = Node.Node.fork(new_fork[1]);
@@ -246,7 +246,7 @@ export class GnomeTilingMode {
     ) {
         let new_fork: Fork | null = null;
 
-        if (fork.is_toplevel && fork.smart_gapped) {
+        if (fork.is_root && fork.smart_gapped) {
             fork.smart_gapped = false;
             const rect = this.ext.monitor_work_area(fork.monitor);
 
@@ -329,7 +329,7 @@ export class GnomeTilingMode {
 
         let new_fork: Fork | null = null;
 
-        if (fork.is_toplevel && fork.smart_gapped) {
+        if (fork.is_root && fork.smart_gapped) {
             fork.smart_gapped = false;
             const rect = this.ext.monitor_work_area(fork.monitor);
 
@@ -422,15 +422,11 @@ export class GnomeTilingMode {
 
                 const workspace_id = this.ext.workspace_id(window);
 
-                const toplevel = this.ext.gnome_forest.forest.find_toplevel(workspace_id);
+                const tree = this.ext.gnome_forest.forest.find_tree(workspace_id);
 
-                if (!toplevel) return;
+                if (!tree) return;
 
-                const topfork = this.ext.gnome_forest.forest.forks.get(toplevel);
-
-                if (!topfork) return;
-
-                const toparea = topfork.area;
+                const toparea = tree.root.area;
 
                 const before = window.frame();
 
@@ -459,7 +455,7 @@ export class GnomeTilingMode {
                 resize(mov1, callback);
                 resize(mov2, callback);
 
-                this.ext.gnome_forest.forest.arrange(this.ext, fork.workspace);
+                this.ext.gnome_forest.forest.arrange(this.ext);
 
                 this.ext.register_fn(() => this.ext.set_overlay(window.frame()));
             }
@@ -475,9 +471,9 @@ export class GnomeTilingMode {
 
     rect_by_active_area(callback: (monitor: Mtk.Rectangle, area: Mtk.Rectangle) => void) {
         if (this.window) {
-            const monitor_id = this.ext.monitors.get(this.window);
-            if (monitor_id) {
-                const monitor = this.ext.monitor_work_area(monitor_id[0]);
+            const window = this.ext.windows.get(this.window);
+            if (window) {
+                const monitor = this.ext.monitor_work_area(this.ext.placement(window)[0]);
                 const rect = this.rect(monitor);
 
                 if (rect) {

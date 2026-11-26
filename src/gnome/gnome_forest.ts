@@ -81,7 +81,7 @@ export class GnomeForest {
         this.tile(b_fork, b_fork.area);
     }
 
-    update_toplevel(fork: Fork, monitor: MonitorID, smart_gaps: boolean) {
+    update_tree(fork: Fork, monitor: MonitorID, smart_gaps: boolean) {
         const rect = this.ext.monitor_work_area(monitor);
 
         fork.smart_gapped = smart_gaps && fork.right === null;
@@ -112,7 +112,7 @@ export class GnomeForest {
             rect.height -= this.ext.sizes.gap_outer * 2;
         }
 
-        const [, fork] = this.forest.create_toplevel(win, rect.copy(), workspace_id);
+        const fork = this.forest.add_tree(win, rect.copy(), workspace_id).root;
         this.ext.remember_place(win.entity);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
@@ -132,25 +132,20 @@ export class GnomeForest {
         if (attached) {
             this.ext.remember_place(attacher.entity);
             const [, fork] = attached;
-            const monitor = this.ext.monitors.get(attachee.entity);
-            if (monitor) {
-                if (fork.is_toplevel && fork.smart_gapped && fork.right) {
-                    fork.smart_gapped = false;
-                    const rect = this.ext.monitor_work_area(fork.monitor);
+            if (fork.is_root && fork.smart_gapped && fork.right) {
+                fork.smart_gapped = false;
+                const rect = this.ext.monitor_work_area(fork.monitor);
 
-                    rect.x += this.ext.sizes.gap_outer;
-                    rect.y += this.ext.sizes.gap_outer;
-                    rect.width -= this.ext.sizes.gap_outer * 2;
-                    rect.height -= this.ext.sizes.gap_outer * 2;
+                rect.x += this.ext.sizes.gap_outer;
+                rect.y += this.ext.sizes.gap_outer;
+                rect.width -= this.ext.sizes.gap_outer * 2;
+                rect.height -= this.ext.sizes.gap_outer * 2;
 
-                    fork.set_area(rect);
-                }
-
-                this.tile(fork, fork.area.copy());
-                return true;
-            } else {
-                Log.error(`missing monitor association for Window(${attachee.entity})`);
+                fork.set_area(rect);
             }
+
+            this.tile(fork, fork.area.copy());
+            return true;
         }
 
         return false;
@@ -162,10 +157,10 @@ export class GnomeForest {
             id = [id[0], 0];
         }
 
-        const toplevel = this.forest.find_toplevel(id);
+        const tree = this.forest.find_tree(id);
 
-        if (toplevel) {
-            const onto = this.forest.largest_window_on(this.ext, toplevel);
+        if (tree) {
+            const onto = this.forest.largest_window_on(this.ext, tree.root.entity);
             if (onto) {
                 if (this.attach_to_window(onto, win, { auto: 0 })) {
                     return;
@@ -197,8 +192,8 @@ export class GnomeForest {
 
     /** Destroy all widgets owned by this object. Call before dropping. */
     destroy() {
-        for (const [, [fent]] of this.forest.toplevel) {
-            for (const node of this.forest.iter(fent)) {
+        for (const { root: fork } of this.forest.trees) {
+            for (const node of this.forest.iter(fork.entity)) {
                 if (node.is_leaf()) {
                     for (const window of node.inner.windows) {
                         this.ext.restore_place(window.entity);
@@ -224,7 +219,7 @@ export class GnomeForest {
 
             if (reflow_fork) {
                 const fork = reflow_fork[1];
-                if (fork.is_toplevel && this.ext.settings.get_smart_gaps() && fork.right === null) {
+                if (fork.is_root && this.ext.settings.get_smart_gaps() && fork.right === null) {
                     const rect = this.ext.monitor_work_area(fork.monitor);
                     fork.set_area(rect);
                     fork.smart_gapped = true;
@@ -311,9 +306,9 @@ export class GnomeForest {
 
     largest_on_workspace(monitor: MonitorID, workspace: WorkspaceID): MutterWindowHandle | null {
         const workspace_id: MonitorWorkspaceID = [monitor, workspace];
-        const toplevel = this.forest.find_toplevel(workspace_id);
-        if (toplevel) {
-            return this.forest.largest_window_on(this.ext, toplevel);
+        const tree = this.forest.find_tree(workspace_id);
+        if (tree) {
+            return this.forest.largest_window_on(this.ext, tree.root.entity);
         }
 
         return null;
@@ -443,7 +438,7 @@ export class GnomeForest {
             } else if (is_sibling && win.stack === null) {
                 swap(placement.orientation, direction);
                 return true;
-            } else if (fork.is_toplevel && fork.right === null) {
+            } else if (fork.is_root && fork.right === null) {
                 this.detach_window(win.entity);
                 this.attach_to_window(attach_to, win, placement);
                 swap(placement.orientation, direction);
@@ -552,7 +547,7 @@ export class GnomeForest {
         if (leaf.inner.tabbed) return;
 
         leaf.inner.tabbed = true;
-        leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner, fork.workspace));
+        leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner));
     }
 
     private remove_tabs(leaf: node.Node<node.NodeLeaf>) {
@@ -671,7 +666,7 @@ export class GnomeForest {
             }
         }
 
-        this.forest.arrange(this.ext, fork.workspace, true);
+        this.forest.arrange(this.ext);
 
         return Ok(void 0);
     }
