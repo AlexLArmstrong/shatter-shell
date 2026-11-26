@@ -1,6 +1,7 @@
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
+import type { NodeStack } from './node.js';
 import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
@@ -144,12 +145,11 @@ export class Stack {
 
     widgets: StackWidgets | null = null;
 
-    /** The currently active tab */
-    active: Entity;
+    readonly node: NodeStack;
+
     /** The currently active tab's index */
     active_id: number = 0;
 
-    prev_active: Entity | null = null;
     prev_active_id: number = 0;
 
     tabs: Array<Tab> = [];
@@ -174,9 +174,9 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, active: Entity, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeStack, workspace: WorkspaceID) {
         this.ext = ext;
-        this.active = active;
+        this.node = node;
         this.initial_workspace = workspace;
         this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.sizes.scale;
         this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.sizes.scale;
@@ -188,6 +188,23 @@ export class Stack {
         this.reposition();
 
         this.tabs_destroy = this.widgets.tabs.connect('destroy', () => this.recreate_widgets());
+    }
+
+    get active(): Entity {
+        return this.node.active.entity;
+    }
+
+    set active(entity: Entity) {
+        const window = this.ext.windows.get(entity);
+        if (window) this.node.active = window;
+    }
+
+    get prev_active(): Entity | null {
+        return this.node.prev_active?.entity ?? null;
+    }
+
+    set prev_active(entity: Entity | null) {
+        this.node.prev_active = entity === null ? null : (this.ext.windows.get(entity) ?? null);
     }
 
     /** Adds a new window to the stack */

@@ -33,6 +33,8 @@ export interface NodeStack {
     kind: NodeKind.STACK;
     idx: number;
     windows: Array<MutterWindowHandle>;
+    active: MutterWindowHandle;
+    prev_active: MutterWindowHandle | null;
     rect: Mtk.Rectangle | null;
     parent: Fork | null;
 }
@@ -188,6 +190,8 @@ export class Node<T extends NodeADT = NodeADT> {
         return new Node({
             kind: NodeKind.STACK,
             windows: [window],
+            active: window,
+            prev_active: null,
             idx,
             rect: null,
             parent: null,

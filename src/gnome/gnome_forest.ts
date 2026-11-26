@@ -559,8 +559,7 @@ export class GnomeForest {
 
         if (toggled && fork.left.is_window(win.entity)) {
             // Assign left window as stack.
-            const idx = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
-            fork.left = node.Node.stacked(win, idx);
+            fork.left = this.new_stack(fork, win);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.left.is_in_stack(win.entity)) {
             const node = stack_toggle(fork, fork.left);
@@ -573,8 +572,7 @@ export class GnomeForest {
             }
         } else if (toggled && fork.right && fork.right.is_window(win.entity)) {
             // Assign right window as stack
-            const idx = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
-            fork.right = node.Node.stacked(win, idx);
+            fork.right = this.new_stack(fork, win);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.right && fork.right.is_in_stack(win.entity)) {
             const node = stack_toggle(fork, fork.right);
@@ -585,15 +583,19 @@ export class GnomeForest {
     }
 
     stack_left(fork: Fork, window: MutterWindowHandle) {
-        const idx = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
-        fork.left = node.Node.stacked(window, idx);
+        fork.left = this.new_stack(fork, window);
         fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
     }
 
     stack_right(fork: Fork, window: MutterWindowHandle) {
-        const idx = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
-        fork.right = node.Node.stacked(window, idx);
+        fork.right = this.new_stack(fork, window);
         fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+    }
+
+    private new_stack(fork: Fork, window: MutterWindowHandle): node.Node<node.NodeStack> {
+        const leaf = node.Node.stacked(window, 0);
+        leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner, fork.workspace));
+        return leaf;
     }
 
     /** Convers a window into a stack if it was not already stacked */
