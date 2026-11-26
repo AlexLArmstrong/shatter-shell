@@ -189,11 +189,12 @@ export class Forest extends Ecs.World {
     /** Attaches a `new` window to the fork which `onto` is attached to. */
     attach_window(
         ext: Ext,
-        onto_entity: Entity,
+        onto: MutterWindowHandle,
         new_window: MutterWindowHandle,
         place_by: MoveBy,
         stack_from_left: boolean,
     ): [Entity, Fork.Fork] | null {
+        const onto_entity = onto.entity;
         const new_entity = new_window.entity;
 
         /** Place a window in a fork based on where the window was originally located */
@@ -270,32 +271,34 @@ export class Forest extends Ecs.World {
 
         const right_node = Node.Node.window(new_window);
 
-        for (const [entity, fork] of this.forks.iter()) {
-            if (fork.left.is_window(onto_entity)) {
-                if (fork.right) {
-                    return fork_and_place_on_left(entity, fork);
-                } else {
-                    fork.right = right_node;
-                    fork.set_ratio(fork.length() / 2);
+        const fork = onto.leaf?.parent;
+        if (!fork) return null;
+        const entity = fork.entity;
 
-                    if ('src' in place_by) {
-                        const [left, right] = area_of_halves(fork);
-                        place_by_keyboard(fork, place_by.src, left, right);
-                    }
+        if (fork.left.is_window(onto_entity)) {
+            if (fork.right) {
+                return fork_and_place_on_left(entity, fork);
+            } else {
+                fork.right = right_node;
+                fork.set_ratio(fork.length() / 2);
 
-                    this.on_attach(new_entity);
-                    return [entity, fork];
+                if ('src' in place_by) {
+                    const [left, right] = area_of_halves(fork);
+                    place_by_keyboard(fork, place_by.src, left, right);
                 }
-            } else if (fork.left.is_in_stack(onto_entity)) {
-                const stack = fork.left.inner;
+
+                this.on_attach(new_entity);
+                return [entity, fork];
+            }
+        } else if (fork.left.is_in_stack(onto_entity)) {
+            const stack = fork.left.inner;
+            return this.attach_stack(ext, stack, fork, new_entity, stack_from_left);
+        } else if (fork.right) {
+            if (fork.right.is_window(onto_entity)) {
+                return fork_and_place_on_right(entity, fork, fork.right);
+            } else if (fork.right.is_in_stack(onto_entity)) {
+                const stack = fork.right.inner;
                 return this.attach_stack(ext, stack, fork, new_entity, stack_from_left);
-            } else if (fork.right) {
-                if (fork.right.is_window(onto_entity)) {
-                    return fork_and_place_on_right(entity, fork, fork.right);
-                } else if (fork.right.is_in_stack(onto_entity)) {
-                    const stack = fork.right.inner;
-                    return this.attach_stack(ext, stack, fork, new_entity, stack_from_left);
-                }
             }
         }
 

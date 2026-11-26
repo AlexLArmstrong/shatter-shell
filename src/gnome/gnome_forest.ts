@@ -138,7 +138,7 @@ export class GnomeForest {
         move_by: MoveBy,
         stack_from_left: boolean = true,
     ): boolean {
-        const attached = this.forest.attach_window(this.ext, attachee.entity, attacher, move_by, stack_from_left);
+        const attached = this.forest.attach_window(this.ext, attachee, attacher, move_by, stack_from_left);
 
         if (attached) {
             const [, fork] = attached;
