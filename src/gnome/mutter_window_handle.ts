@@ -1,6 +1,7 @@
 import type { WindowHandle } from '../core/window_handle.js';
 import type { Entity } from '../ecs.js';
 import type { Ext } from '../extension.js';
+import type { NodeLeaf } from '../node.js';
 
 import * as Events from '../events.js';
 import * as focus from '../focus.js';
@@ -48,6 +49,7 @@ export class MutterWindowHandle implements WindowHandle {
     meta: Meta.Window;
     ext: Ext;
     stack: number | null = null;
+    leaf: NodeLeaf | null = null;
     known_workspace: WorkspaceID;
     grab: boolean = false;
     activate_after_move: boolean = false;

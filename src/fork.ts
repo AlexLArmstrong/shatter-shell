@@ -4,7 +4,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
-import type { Node } from './node.js';
+import type { Node, NodeLeaf } from './node.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
@@ -95,6 +95,14 @@ export class Fork {
         if (this._right) this.let_go(this._right);
     }
 
+    hold_window(leaf: NodeLeaf, window: MutterWindowHandle) {
+        window.leaf = leaf;
+    }
+
+    let_go_window(leaf: NodeLeaf, window: MutterWindowHandle) {
+        if (window.leaf === leaf) window.leaf = null;
+    }
+
     private replaced(previous: Node | null, branch: Node | null) {
         if (branch) this.hold(branch);
         if (previous && previous !== this._left && previous !== this._right) this.let_go(previous);
@@ -103,8 +111,16 @@ export class Fork {
     private hold(branch: Node) {
         const inner = branch.inner;
         inner.parent = this;
-        if (inner.kind === NodeKind.FORK) {
-            inner.fork.parent = this;
+        switch (inner.kind) {
+            case NodeKind.FORK:
+                inner.fork.parent = this;
+                break;
+            case NodeKind.WINDOW:
+                this.hold_window(inner, inner.window);
+                break;
+            case NodeKind.STACK:
+                for (const window of inner.windows) this.hold_window(inner, window);
+                break;
         }
     }
 
@@ -112,8 +128,16 @@ export class Fork {
         const inner = branch.inner;
         if (inner.parent !== this) return;
         inner.parent = null;
-        if (inner.kind === NodeKind.FORK) {
-            if (inner.fork.parent === this) inner.fork.parent = null;
+        switch (inner.kind) {
+            case NodeKind.FORK:
+                if (inner.fork.parent === this) inner.fork.parent = null;
+                break;
+            case NodeKind.WINDOW:
+                this.let_go_window(inner, inner.window);
+                break;
+            case NodeKind.STACK:
+                for (const window of inner.windows) this.let_go_window(inner, window);
+                break;
         }
     }
 
@@ -192,7 +216,7 @@ export class Fork {
                 const inner = this.right.inner;
                 if (inner.kind === NodeKind.WINDOW) {
                     closure = () => {
-                        inner.window = b;
+                        node.window_set(inner, b);
                     };
                 } else if (inner.kind === NodeKind.STACK) {
                     const idx = node.stack_find(inner, a.entity);
@@ -203,7 +227,7 @@ export class Fork {
 
                     closure = () => {
                         node.stack_replace(ext, inner, b);
-                        inner.windows[idx] = b;
+                        node.stack_set(inner, idx, b);
                     };
                 }
             }
@@ -217,7 +241,7 @@ export class Fork {
                 const inner = this.left.inner;
                 if (Ecs.entity_eq(inner.window.entity, a.entity)) {
                     closure = () => {
-                        inner.window = b;
+                        node.window_set(inner, b);
                     };
                 } else {
                     check_right();
@@ -231,7 +255,7 @@ export class Fork {
                     const id = idx;
                     closure = () => {
                         node.stack_replace(ext, inner_s, b);
-                        inner_s.windows[id] = b;
+                        node.stack_set(inner_s, id, b);
                     };
                 } else {
                     check_right();

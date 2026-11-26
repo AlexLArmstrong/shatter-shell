@@ -37,8 +37,36 @@ export interface NodeStack {
     parent: Fork | null;
 }
 
+export function stack_add(node: NodeStack, window: MutterWindowHandle, front = false) {
+    if (front) {
+        node.windows.unshift(window);
+    } else {
+        node.windows.push(window);
+    }
+    node.parent?.hold_window(node, window);
+}
+
+export function stack_set(node: NodeStack, idx: number, window: MutterWindowHandle) {
+    const previous = node.windows[idx];
+    node.windows[idx] = window;
+    node.parent?.hold_window(node, window);
+    if (previous) node.parent?.let_go_window(node, previous);
+}
+
+function stack_take(node: NodeStack, idx: number) {
+    const [window] = node.windows.splice(idx, 1);
+    if (window) node.parent?.let_go_window(node, window);
+}
+
+export function window_set(node: NodeWindow, window: MutterWindowHandle) {
+    const previous = node.window;
+    node.window = window;
+    node.parent?.hold_window(node, window);
+    node.parent?.let_go_window(node, previous);
+}
+
 function stack_detach(node: NodeStack, stack: Stack, idx: number) {
-    node.windows.splice(idx, 1);
+    stack_take(node, idx);
     stack.remove_by_pos(idx);
 }
 
@@ -123,7 +151,7 @@ export function stack_remove(forest: Forest, node: NodeStack, entity: Entity) {
     const stack = forest.stacks.get(node.idx);
     if (!stack) return null;
     const idx = stack.remove_tab(entity);
-    if (idx !== null) node.windows.splice(idx, 1);
+    if (idx !== null) stack_take(node, idx);
     return idx;
 }
 
@@ -132,6 +160,8 @@ function stack_swap(node: NodeStack, from: number, to: number) {
     node.windows[from] = node.windows[to]!;
     node.windows[to] = tmp!;
 }
+
+export type NodeLeaf = NodeWindow | NodeStack;
 
 export type NodeADT = NodeFork | NodeWindow | NodeStack;
 
@@ -162,6 +192,10 @@ export class Node<T extends NodeADT = NodeADT> {
             rect: null,
             parent: null,
         });
+    }
+
+    has(entity: Entity): boolean {
+        return this.is_window(entity) || this.is_in_stack(entity);
     }
 
     /** Check if the entity exists as a child of this stack */

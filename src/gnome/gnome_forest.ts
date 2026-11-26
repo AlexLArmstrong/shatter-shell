@@ -286,8 +286,9 @@ export class GnomeForest {
                         const sibling = fork.right.inner.window;
                         if (sibling.frame().contains_rect(cursor)) {
                             if (swap) {
-                                fork.right.inner.window = fork.left.inner.window;
-                                fork.left.inner.window = sibling;
+                                const moved = fork.left.inner.window;
+                                node.window_set(fork.left.inner, sibling);
+                                node.window_set(fork.right.inner, moved);
 
                                 this.tile(fork, fork.area);
                             }
@@ -298,8 +299,9 @@ export class GnomeForest {
                         const sibling = fork.left.inner.window;
                         if (sibling.frame().contains_rect(cursor)) {
                             if (swap) {
-                                fork.left.inner.window = fork.right.inner.window;
-                                fork.right.inner.window = sibling;
+                                const moved = fork.right.inner.window;
+                                node.window_set(fork.right.inner, sibling);
+                                node.window_set(fork.left.inner, moved);
 
                                 this.tile(fork, fork.area);
                             }

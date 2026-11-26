@@ -855,11 +855,11 @@ export class Ext extends Ecs.System<ExtEvent> {
                             if (stack) {
                                 const stack_info = gnome_forest.find_stack(stack.active);
                                 if (stack_info) {
-                                    const node: node.NodeStack = stack_info[1].inner;
+                                    const leaf: node.NodeStack = stack_info[1].inner;
 
                                     win.stack = attachment;
-                                    node.windows.push(win);
-                                    gnome_forest.update_stack(node);
+                                    node.stack_add(leaf, win);
+                                    gnome_forest.update_stack(leaf);
                                     gnome_forest.forest.on_attach(fork.entity, win.entity);
                                     stack.activate(win.entity);
                                     gnome_forest.tile(fork, fork.area);
