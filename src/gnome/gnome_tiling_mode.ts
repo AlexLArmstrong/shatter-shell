@@ -6,7 +6,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import type { Entity } from '../ecs.js';
 import type { Ext } from '../extension.js';
-import type { NodeStack } from '../node.js';
+import type { NodeLeaf } from '../node.js';
 
 import * as geom from '../core/geom.js';
 import { calculate } from '../core/movement.js';
@@ -168,7 +168,7 @@ export class GnomeTilingMode {
     }
 
     unstack_from_fork(
-        stack: NodeStack,
+        stack: NodeLeaf,
         focused: window.MutterWindowHandle,
         fork: Fork,
         left: Node.Node,
@@ -240,7 +240,7 @@ export class GnomeTilingMode {
     }
 
     move_alongside_stack(
-        [fork, branch, is_left]: [Fork, Node.Node<NodeStack>, boolean],
+        [fork, branch, is_left]: [Fork, Node.Node<NodeLeaf>, boolean],
         focused: window.MutterWindowHandle,
         direction: Direction,
     ) {
@@ -312,7 +312,7 @@ export class GnomeTilingMode {
     }
 
     move_from_stack(
-        [fork, branch, is_left]: [Fork, Node.Node<NodeStack>, boolean],
+        [fork, branch, is_left]: [Fork, Node.Node<NodeLeaf>, boolean],
         focused: window.MutterWindowHandle,
         direction: Direction,
         force_detach: boolean = false,

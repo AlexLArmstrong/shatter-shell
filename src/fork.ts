@@ -4,7 +4,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
-import type { Node, NodeStack, TabBars } from './node.js';
+import type { Node, NodeLeaf, TabBars } from './node.js';
 
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import * as node from './node.js';
@@ -94,11 +94,11 @@ export class Fork {
         if (this._right) this.let_go(this._right);
     }
 
-    hold_window(leaf: NodeStack, window: MutterWindowHandle) {
+    hold_window(leaf: NodeLeaf, window: MutterWindowHandle) {
         window.leaf = leaf;
     }
 
-    let_go_window(leaf: NodeStack, window: MutterWindowHandle) {
+    let_go_window(leaf: NodeLeaf, window: MutterWindowHandle) {
         if (window.leaf === leaf) window.leaf = null;
     }
 
@@ -114,7 +114,7 @@ export class Fork {
             case NodeKind.FORK:
                 inner.fork.parent = this;
                 break;
-            case NodeKind.STACK:
+            case NodeKind.LEAF:
                 for (const window of inner.windows) this.hold_window(inner, window);
                 break;
         }
@@ -128,7 +128,7 @@ export class Fork {
             case NodeKind.FORK:
                 if (inner.fork.parent === this) inner.fork.parent = null;
                 break;
-            case NodeKind.STACK:
+            case NodeKind.LEAF:
                 for (const window of inner.windows) this.let_go_window(inner, window);
                 break;
         }
@@ -311,7 +311,7 @@ export class Fork {
                         cfork.monitor = monitor;
                         cfork.on_primary_display = primary;
                         break;
-                    case NodeKind.STACK:
+                    case NodeKind.LEAF:
                         for (const window of child.inner.windows) {
                             ext.size_signals_block(window);
                             window.reassignment = false;
@@ -383,7 +383,7 @@ export class Fork {
 
 function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
     switch (branch.inner.kind) {
-        case NodeKind.STACK:
+        case NodeKind.LEAF:
             if (!branch.inner.tabbed) return branch.inner.windows[0]!.minimum_size();
             return stack_minimum_size(ext, branch.inner.windows);
         case NodeKind.FORK:

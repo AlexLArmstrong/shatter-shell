@@ -11,7 +11,7 @@ import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
 export enum NodeKind {
     FORK = 1,
-    STACK = 3,
+    LEAF = 3,
 }
 
 export interface NodeFork {
@@ -20,8 +20,8 @@ export interface NodeFork {
     parent: Fork | null;
 }
 
-export interface NodeStack {
-    kind: NodeKind.STACK;
+export interface NodeLeaf {
+    kind: NodeKind.LEAF;
     tabbed: boolean;
     idx: number | null;
     windows: Array<MutterWindowHandle>;
@@ -37,19 +37,19 @@ export interface NodeStack {
  */
 
 export interface TabBars {
-    update_stack(stack: NodeStack): void;
+    update_stack(stack: NodeLeaf): void;
 }
 
-function sync_tabs(tabs: TabBars | null, node: NodeStack) {
+function sync_tabs(tabs: TabBars | null, node: NodeLeaf) {
     tabs?.update_stack(node);
 }
 
-export function stack_find(node: NodeStack, entity: Entity) {
+export function stack_find(node: NodeLeaf, entity: Entity) {
     const idx = node.windows.findIndex(other => Ecs.entity_eq(entity, other.entity));
     return idx === -1 ? null : idx;
 }
 
-export function stack_activate(tabs: TabBars | null, node: NodeStack, entity: Entity) {
+export function stack_activate(tabs: TabBars | null, node: NodeLeaf, entity: Entity) {
     const idx = stack_find(node, entity);
     const window = idx === null ? undefined : node.windows[idx];
     if (!window) return;
@@ -62,7 +62,7 @@ export function stack_activate(tabs: TabBars | null, node: NodeStack, entity: En
     sync_tabs(tabs, node);
 }
 
-export function stack_insert(tabs: TabBars | null, node: NodeStack, window: MutterWindowHandle, at_end: boolean) {
+export function stack_insert(tabs: TabBars | null, node: NodeLeaf, window: MutterWindowHandle, at_end: boolean) {
     if (at_end) {
         node.windows.push(window);
     } else {
@@ -74,7 +74,7 @@ export function stack_insert(tabs: TabBars | null, node: NodeStack, window: Mutt
 }
 
 /** Removes a window from a stack */
-export function stack_remove(tabs: TabBars | null, node: NodeStack, entity: Entity): number | null {
+export function stack_remove(tabs: TabBars | null, node: NodeLeaf, entity: Entity): number | null {
     const idx = stack_find(node, entity);
     if (idx === null) return null;
 
@@ -94,7 +94,7 @@ export function stack_remove(tabs: TabBars | null, node: NodeStack, entity: Enti
     return idx;
 }
 
-export function stack_replace(tabs: TabBars | null, node: NodeStack, old: Entity, window: MutterWindowHandle) {
+export function stack_replace(tabs: TabBars | null, node: NodeLeaf, old: Entity, window: MutterWindowHandle) {
     const idx = stack_find(node, old);
     const previous = idx === null ? undefined : node.windows[idx];
     if (idx === null || !previous) return;
@@ -109,7 +109,7 @@ export function stack_replace(tabs: TabBars | null, node: NodeStack, old: Entity
     sync_tabs(tabs, node);
 }
 
-function stack_swap(tabs: TabBars | null, node: NodeStack, from: number, to: number) {
+function stack_swap(tabs: TabBars | null, node: NodeLeaf, from: number, to: number) {
     const a = node.windows[from];
     const b = node.windows[to];
     if (a === undefined || b === undefined) return;
@@ -120,7 +120,7 @@ function stack_swap(tabs: TabBars | null, node: NodeStack, from: number, to: num
 }
 
 /** Move the window in a stack to the left, and detach if it it as the end. */
-export function stack_move_left(tabs: TabBars | null, node: NodeStack, entity: Entity): boolean {
+export function stack_move_left(tabs: TabBars | null, node: NodeLeaf, entity: Entity): boolean {
     const idx = stack_find(node, entity);
     if (idx === null) return false;
 
@@ -134,7 +134,7 @@ export function stack_move_left(tabs: TabBars | null, node: NodeStack, entity: E
 }
 
 /** Move the window in a stack to the right, and detach if it is at the end. */
-export function stack_move_right(tabs: TabBars | null, node: NodeStack, entity: Entity): boolean {
+export function stack_move_right(tabs: TabBars | null, node: NodeLeaf, entity: Entity): boolean {
     const idx = stack_find(node, entity);
     if (idx === null) return false;
 
@@ -147,7 +147,7 @@ export function stack_move_right(tabs: TabBars | null, node: NodeStack, entity: 
     return true;
 }
 
-export type NodeADT = NodeFork | NodeStack;
+export type NodeADT = NodeFork | NodeLeaf;
 
 /** A tiling node may either refer to a window entity, or another fork entity */
 export class Node<T extends NodeADT = NodeADT> {
@@ -163,9 +163,9 @@ export class Node<T extends NodeADT = NodeADT> {
         return new Node({ kind: NodeKind.FORK, fork, parent: null });
     }
 
-    static window(window: MutterWindowHandle): Node<NodeStack> {
+    static window(window: MutterWindowHandle): Node<NodeLeaf> {
         return new Node({
-            kind: NodeKind.STACK,
+            kind: NodeKind.LEAF,
             tabbed: false,
             idx: null,
             windows: [window],
@@ -176,15 +176,15 @@ export class Node<T extends NodeADT = NodeADT> {
         });
     }
 
-    is_leaf(): this is Node<NodeStack> {
-        return this.inner.kind === NodeKind.STACK;
+    is_leaf(): this is Node<NodeLeaf> {
+        return this.inner.kind === NodeKind.LEAF;
     }
 
-    has(entity: Entity): this is Node<NodeStack> {
+    has(entity: Entity): this is Node<NodeLeaf> {
         return this.is_leaf() && this.inner.windows.some(other => Ecs.entity_eq(entity, other.entity));
     }
 
-    is_in_stack(entity: Entity): this is Node<NodeStack> {
+    is_in_stack(entity: Entity): this is Node<NodeLeaf> {
         return this.has(entity) && this.inner.tabbed;
     }
 
@@ -193,7 +193,7 @@ export class Node<T extends NodeADT = NodeADT> {
         return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.fork.entity, entity);
     }
 
-    is_window(entity: Entity): this is Node<NodeStack> {
+    is_window(entity: Entity): this is Node<NodeLeaf> {
         return this.has(entity) && !this.inner.tabbed;
     }
 
@@ -217,7 +217,7 @@ export class Node<T extends NodeADT = NodeADT> {
                 }
 
                 break;
-            case NodeKind.STACK:
+            case NodeKind.LEAF:
                 this.inner.rect = area.copy();
                 if (this.inner.tabbed) {
                     const tab_height = ext.sizes.scale * TAB_HEIGHT_UNSCALED;

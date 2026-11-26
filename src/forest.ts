@@ -60,7 +60,7 @@ export class Forest extends Ecs.World {
     requested: Map<Entity, Request> = new Map();
 
     /** Stores stacks which must have their containers redrawn */
-    stack_updates: Array<[Node.NodeStack, Entity]> = [];
+    stack_updates: Array<[Node.NodeLeaf, Entity]> = [];
 
     /** The storage for holding all fork associations. */
     forks: Ecs.Storage<Fork.Fork> = this.register_storage();
@@ -70,7 +70,7 @@ export class Forest extends Ecs.World {
 
     stacks: arena.Arena<Stack> = new Arena();
 
-    view_of(leaf: Node.NodeStack): Stack | null {
+    view_of(leaf: Node.NodeLeaf): Stack | null {
         return leaf.idx === null ? null : this.stacks.get(leaf.idx);
     }
 
@@ -150,7 +150,7 @@ export class Forest extends Ecs.World {
 
     attach_stack(
         ext: Ext,
-        stack: Node.NodeStack,
+        stack: Node.NodeLeaf,
         fork: Fork.Fork,
         new_entity: Entity,
         stack_from_left: boolean,
@@ -393,7 +393,7 @@ export class Forest extends Ecs.World {
                         case Node.NodeKind.FORK:
                             this.reassign_children_to_parent(fork_entity, fork.right.inner.fork.entity, fork);
                             break;
-                        case Node.NodeKind.STACK:
+                        case Node.NodeKind.LEAF:
                             const detached = fork.right;
                             fork.left = detached;
                             fork.right = null;
@@ -412,7 +412,7 @@ export class Forest extends Ecs.World {
                     case Node.NodeKind.FORK:
                         this.reassign_children_to_parent(fork_entity, fork.left.inner.fork.entity, fork);
                         break;
-                    case Node.NodeKind.STACK:
+                    case Node.NodeKind.LEAF:
                         fork.right = null;
                         break;
                 }

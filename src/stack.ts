@@ -1,7 +1,7 @@
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
-import type { NodeStack } from './node.js';
+import type { NodeLeaf } from './node.js';
 import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
@@ -145,7 +145,7 @@ export class Stack {
 
     widgets: StackWidgets | null = null;
 
-    readonly node: NodeStack;
+    readonly node: NodeLeaf;
 
     tabs: Array<Tab> = [];
 
@@ -169,7 +169,7 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, node: NodeStack, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeLeaf, workspace: WorkspaceID) {
         this.ext = ext;
         this.node = node;
         this.initial_workspace = workspace;

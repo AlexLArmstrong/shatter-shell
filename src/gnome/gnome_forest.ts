@@ -236,11 +236,11 @@ export class GnomeForest {
             this.ext.windows.with(win, info => (info.ignore_detach = false));
         }
 
-        if (stack?.kind === NodeKind.STACK) this.dissolve_single_stack(stack);
+        if (stack?.kind === NodeKind.LEAF) this.dissolve_single_stack(stack);
     }
 
     /** Turns a stack back into a plain window once only one window is left in it. */
-    dissolve_single_stack(stack: node.NodeStack) {
+    dissolve_single_stack(stack: node.NodeLeaf) {
         if (!this.ext.settings.get_dissolve_single_window_stacks()) return;
         if (stack.windows.length !== 1) return;
 
@@ -283,7 +283,7 @@ export class GnomeForest {
         return false;
     }
 
-    find_stack(entity: Entity): [Fork, node.Node<node.NodeStack>, boolean] | null {
+    find_stack(entity: Entity): [Fork, node.Node<node.NodeLeaf>, boolean] | null {
         const att = this.ext.windows.get(entity)?.leaf?.parent?.entity ?? null;
         if (att) {
             const fork = this.forest.forks.get(att);
@@ -548,14 +548,14 @@ export class GnomeForest {
         this.tile(fork, fork.area);
     }
 
-    private add_tabs(fork: Fork, leaf: node.Node<node.NodeStack>) {
+    private add_tabs(fork: Fork, leaf: node.Node<node.NodeLeaf>) {
         if (leaf.inner.tabbed) return;
 
         leaf.inner.tabbed = true;
         leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner, fork.workspace));
     }
 
-    private remove_tabs(leaf: node.Node<node.NodeStack>) {
+    private remove_tabs(leaf: node.Node<node.NodeLeaf>) {
         if (leaf.inner.idx !== null) this.forest.stacks.remove(leaf.inner.idx)?.destroy();
 
         leaf.inner.tabbed = false;
@@ -580,7 +580,7 @@ export class GnomeForest {
         fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
     }
 
-    update_stack(stack: node.NodeStack) {
+    update_stack(stack: node.NodeLeaf) {
         const container = this.forest.view_of(stack);
         if (!container) return;
 

@@ -482,7 +482,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    stack_switch(apply: (stack: node.NodeStack) => boolean): boolean {
+    stack_switch(apply: (stack: node.NodeLeaf) => boolean): boolean {
         if (!this.gnome_forest) return false;
 
         const window = this.get_focused_window();
@@ -616,7 +616,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 !stack_object
                 && prev
                 && this.windows.contains(prev)
-                && stack_node?.kind === node.NodeKind.STACK
+                && stack_node?.kind === node.NodeKind.LEAF
             ) {
                 // The stack dissolved, leaving just this window
                 const remaining = stack_node.windows[0];
@@ -837,7 +837,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                             if (stack) {
                                 const stack_info = gnome_forest.find_stack(stack.active);
                                 if (stack_info) {
-                                    const stack_node: node.NodeStack = stack_info[1].inner;
+                                    const stack_node: node.NodeLeaf = stack_info[1].inner;
 
                                     this.remember_place(win.entity);
                                     node.stack_insert(gnome_forest, stack_node, win, true);
