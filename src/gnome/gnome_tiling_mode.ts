@@ -191,8 +191,8 @@ export class GnomeTilingMode {
 
         // Update parent assignments
         forest.on_attach(new_fork[0], focused.entity);
-        for (const e of stack.entities) {
-            forest.on_attach(new_fork[0], e);
+        for (const window of stack.windows) {
+            forest.on_attach(new_fork[0], window.entity);
         }
 
         return new_fork[1];
@@ -302,18 +302,18 @@ export class GnomeTilingMode {
             let left, right;
             if (reverse) {
                 left = branch;
-                right = Node.Node.window(focused.entity);
+                right = Node.Node.window(focused);
             } else {
-                left = Node.Node.window(focused.entity);
+                left = Node.Node.window(focused);
                 right = branch;
             }
 
             new_fork = this.unstack_from_fork(branch.inner, focused, fork, left, right, is_left);
         } else if (reverse) {
-            fork.right = Node.Node.window(focused.entity);
+            fork.right = Node.Node.window(focused);
         } else {
             fork.right = fork.left;
-            fork.left = Node.Node.window(focused.entity);
+            fork.left = Node.Node.window(focused);
         }
 
         const modifier = new_fork ?? fork;
@@ -333,7 +333,7 @@ export class GnomeTilingMode {
 
         const inner = branch.inner;
 
-        if (inner.entities.length === 1) {
+        if (inner.windows.length === 1) {
             this.ext.gnome_forest.toggle_stacking();
             this.overlay_watch(focused);
             return;
@@ -364,18 +364,18 @@ export class GnomeTilingMode {
                 let left, right;
                 if (reverse) {
                     left = branch;
-                    right = Node.Node.window(fentity);
+                    right = Node.Node.window(focused);
                 } else {
-                    left = Node.Node.window(fentity);
+                    left = Node.Node.window(focused);
                     right = branch;
                 }
 
                 new_fork = this.unstack_from_fork(inner, focused, fork, left, right, is_left);
             } else if (reverse) {
-                fork.right = Node.Node.window(fentity);
+                fork.right = Node.Node.window(focused);
             } else {
                 fork.right = fork.left;
-                fork.left = Node.Node.window(fentity);
+                fork.left = Node.Node.window(focused);
             }
 
             const modifier = new_fork ?? fork;

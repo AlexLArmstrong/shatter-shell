@@ -109,10 +109,7 @@ export class GnomeForest {
         }
 
         if (fork.left.inner.kind === NodeKind.WINDOW) {
-            const win = this.ext.windows.get(fork.left.inner.entity);
-            if (win) {
-                win.smart_gapped = fork.smart_gapped;
-            }
+            fork.left.inner.window.smart_gapped = fork.smart_gapped;
         }
 
         fork.area = fork.set_area(rect.copy());
@@ -131,7 +128,7 @@ export class GnomeForest {
             rect.height -= this.ext.sizes.gap_outer * 2;
         }
 
-        const [entity, fork] = this.forest.create_toplevel(win.entity, rect.copy(), workspace_id);
+        const [entity, fork] = this.forest.create_toplevel(win, rect.copy(), workspace_id);
         this.forest.on_attach(entity, win.entity);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
@@ -146,13 +143,7 @@ export class GnomeForest {
         move_by: MoveBy,
         stack_from_left: boolean = true,
     ): boolean {
-        const attached = this.forest.attach_window(
-            this.ext,
-            attachee.entity,
-            attacher.entity,
-            move_by,
-            stack_from_left,
-        );
+        const attached = this.forest.attach_window(this.ext, attachee.entity, attacher, move_by, stack_from_left);
 
         if (attached) {
             const [, fork] = attached;
@@ -224,10 +215,10 @@ export class GnomeForest {
         for (const [, [fent]] of this.forest.toplevel) {
             for (const node of this.forest.iter(fent)) {
                 if (node.inner.kind === NodeKind.WINDOW) {
-                    this.forest.on_detach(node.inner.entity);
+                    this.forest.on_detach(node.inner.window.entity);
                 } else if (node.inner.kind === NodeKind.STACK) {
-                    for (const window of node.inner.entities) {
-                        this.forest.on_detach(window);
+                    for (const window of node.inner.windows) {
+                        this.forest.on_detach(window.entity);
                     }
                 }
             }
@@ -270,12 +261,11 @@ export class GnomeForest {
     /** Turns a stack back into a plain window once only one window is left in it. */
     dissolve_single_stack(stack: node.NodeStack) {
         if (!this.ext.settings.get_dissolve_single_window_stacks()) return;
-        if (stack.entities.length !== 1) return;
+        if (stack.windows.length !== 1) return;
 
-        const entity = stack.entities[0]!;
-        const fork = this.get_parent_fork(entity);
-        const window = this.ext.windows.get(entity);
-        if (fork && window) this.unstack(fork, window);
+        const window = stack.windows[0]!;
+        const fork = this.get_parent_fork(window.entity);
+        if (fork) this.unstack(fork, window);
     }
 
     /** Swaps the location of two windows if the dropped window was dropped onto its sibling */
@@ -293,11 +283,11 @@ export class GnomeForest {
                     && fork.right.inner.kind === NodeKind.WINDOW
                 ) {
                     if (fork.left.is_window(win)) {
-                        const sibling = this.ext.windows.get(fork.right.inner.entity);
-                        if (sibling && sibling.frame().contains_rect(cursor)) {
+                        const sibling = fork.right.inner.window;
+                        if (sibling.frame().contains_rect(cursor)) {
                             if (swap) {
-                                fork.left.inner.entity = fork.right.inner.entity;
-                                fork.right.inner.entity = win;
+                                fork.right.inner.window = fork.left.inner.window;
+                                fork.left.inner.window = sibling;
 
                                 this.tile(fork, fork.area);
                             }
@@ -305,11 +295,11 @@ export class GnomeForest {
                             return true;
                         }
                     } else if (fork.right.is_window(win)) {
-                        const sibling = this.ext.windows.get(fork.left.inner.entity);
-                        if (sibling && sibling.frame().contains_rect(cursor)) {
+                        const sibling = fork.left.inner.window;
+                        if (sibling.frame().contains_rect(cursor)) {
                             if (swap) {
-                                fork.right.inner.entity = fork.left.inner.entity;
-                                fork.left.inner.entity = win;
+                                fork.left.inner.window = fork.right.inner.window;
+                                fork.right.inner.window = sibling;
 
                                 this.tile(fork, fork.area);
                             }
@@ -406,8 +396,7 @@ export class GnomeForest {
         // If it appears to not be attaching to anything, assume we are attaching to its sibling
         if (attach_to === null) {
             if (fork.left.inner.kind === NodeKind.WINDOW && fork.right?.inner.kind === NodeKind.WINDOW) {
-                const attaching = fork.left.is_window(win.entity) ? fork.right.inner.entity : fork.left.inner.entity;
-                attach_to = this.ext.windows.get(attaching);
+                attach_to = fork.left.is_window(win.entity) ? fork.right.inner.window : fork.left.inner.window;
             } else if (!windowless) {
                 this.tile(fork, fork.area);
             }
@@ -569,11 +558,11 @@ export class GnomeForest {
         const stack_toggle = (fork: Fork, branch: node.Node<node.NodeStack>) => {
             // If the stack contains 1 item, unstack it
             const stack = branch.inner;
-            if (stack.entities.length === 1) {
+            if (stack.windows.length === 1) {
                 win.stack = null;
                 this.forest.stacks.remove(stack.idx)?.destroy();
                 fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
-                return node.Node.window(win.entity);
+                return node.Node.window(win);
             }
 
             return null;
@@ -582,7 +571,7 @@ export class GnomeForest {
         if (toggled && fork.left.is_window(win.entity)) {
             // Assign left window as stack.
             win.stack = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
-            fork.left = node.Node.stacked(win.entity, win.stack);
+            fork.left = node.Node.stacked(win, win.stack);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.left.is_in_stack(win.entity)) {
             const node = stack_toggle(fork, fork.left);
@@ -596,7 +585,7 @@ export class GnomeForest {
         } else if (toggled && fork.right && fork.right.is_window(win.entity)) {
             // Assign right window as stack
             win.stack = this.forest.stacks.insert(new Stack(this.ext, win.entity, fork.workspace));
-            fork.right = node.Node.stacked(win.entity, win.stack);
+            fork.right = node.Node.stacked(win, win.stack);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.right && fork.right.is_in_stack(win.entity)) {
             const node = stack_toggle(fork, fork.right);
@@ -608,13 +597,13 @@ export class GnomeForest {
 
     stack_left(fork: Fork, window: MutterWindowHandle) {
         window.stack = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
-        fork.left = node.Node.stacked(window.entity, window.stack);
+        fork.left = node.Node.stacked(window, window.stack);
         fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
     }
 
     stack_right(fork: Fork, window: MutterWindowHandle) {
         window.stack = this.forest.stacks.insert(new Stack(this.ext, window.entity, fork.workspace));
-        fork.right = node.Node.stacked(window.entity, window.stack);
+        fork.right = node.Node.stacked(window, window.stack);
         fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
     }
 
@@ -640,12 +629,9 @@ export class GnomeForest {
                 container.clear();
 
                 // Collect names of each entity in the stack
-                for (const entity of stack.entities) {
-                    const window = this.ext.windows.get(entity);
-                    if (window) {
-                        window.stack = stack.idx;
-                        container.add(window);
-                    }
+                for (const window of stack.windows) {
+                    window.stack = stack.idx;
+                    container.add(window);
                 }
 
                 container.update_positions(stack.rect);

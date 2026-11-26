@@ -242,8 +242,7 @@ export class GnomeGrab {
 
         if (attach_to === null) {
             if (fork.left.inner.kind === node.NodeKind.WINDOW && fork.right?.inner.kind === node.NodeKind.WINDOW) {
-                const attaching = fork.left.is_window(win.entity) ? fork.right.inner.entity : fork.left.inner.entity;
-                attach_to = ext.windows.get(attaching);
+                attach_to = fork.left.is_window(win.entity) ? fork.right.inner.window : fork.left.inner.window;
             }
         }
 

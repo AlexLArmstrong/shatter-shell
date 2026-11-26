@@ -97,14 +97,14 @@ export class Fork {
         const locate = (branch: Node): Node | null => {
             switch (branch.inner.kind) {
                 case NodeKind.WINDOW:
-                    if (Ecs.entity_eq(branch.inner.entity, entity)) {
+                    if (Ecs.entity_eq(branch.inner.window.entity, entity)) {
                         return branch;
                     }
 
                     break;
                 case NodeKind.STACK:
-                    for (const e of branch.inner.entities) {
-                        if (Ecs.entity_eq(e, entity)) {
+                    for (const e of branch.inner.windows) {
+                        if (Ecs.entity_eq(e.entity, entity)) {
                             return branch;
                         }
                     }
@@ -140,7 +140,7 @@ export class Fork {
                 const inner = this.right.inner;
                 if (inner.kind === NodeKind.WINDOW) {
                     closure = () => {
-                        inner.entity = b.entity;
+                        inner.window = b;
                     };
                 } else if (inner.kind === NodeKind.STACK) {
                     const idx = node.stack_find(inner, a.entity);
@@ -151,7 +151,7 @@ export class Fork {
 
                     closure = () => {
                         node.stack_replace(ext, inner, b);
-                        inner.entities[idx] = b.entity;
+                        inner.windows[idx] = b;
                     };
                 }
             }
@@ -163,9 +163,9 @@ export class Fork {
                 break;
             case NodeKind.WINDOW:
                 const inner = this.left.inner;
-                if (Ecs.entity_eq(inner.entity, a.entity)) {
+                if (Ecs.entity_eq(inner.window.entity, a.entity)) {
                     closure = () => {
-                        inner.entity = b.entity;
+                        inner.window = b;
                     };
                 } else {
                     check_right();
@@ -179,7 +179,7 @@ export class Fork {
                     const id = idx;
                     closure = () => {
                         node.stack_replace(ext, inner_s, b);
-                        inner_s.entities[id] = b.entity;
+                        inner_s.windows[id] = b;
                     };
                 } else {
                     check_right();
@@ -312,27 +312,21 @@ export class Fork {
                         cfork.on_primary_display = primary;
                         break;
                     case NodeKind.WINDOW:
-                        const window = ext.windows.get(child.inner.entity);
-                        if (window) {
+                        const window = child.inner.window;
+                        ext.size_signals_block(window);
+                        window.reassignment = false;
+                        window.known_workspace = workspace;
+                        window.meta.change_workspace_by_index(workspace, true);
+                        ext.monitors.insert(window.entity, [monitor, workspace]);
+                        blocked.push(window);
+                        break;
+                    case NodeKind.STACK:
+                        for (const window of child.inner.windows) {
                             ext.size_signals_block(window);
-                            window.reassignment = false;
                             window.known_workspace = workspace;
                             window.meta.change_workspace_by_index(workspace, true);
                             ext.monitors.insert(window.entity, [monitor, workspace]);
                             blocked.push(window);
-                        }
-                        break;
-                    case NodeKind.STACK:
-                        for (const entity of child.inner.entities) {
-                            const window = ext.windows.get(entity);
-
-                            if (window) {
-                                ext.size_signals_block(window);
-                                window.known_workspace = workspace;
-                                window.meta.change_workspace_by_index(workspace, true);
-                                ext.monitors.insert(window.entity, [monitor, workspace]);
-                                blocked.push(window);
-                            }
                         }
                 }
             }
@@ -398,24 +392,20 @@ export class Fork {
 function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
     switch (branch.inner.kind) {
         case NodeKind.WINDOW:
-            return window_minimum_size(ext, branch.inner.entity);
+            return branch.inner.window.minimum_size();
         case NodeKind.STACK:
-            return stack_minimum_size(ext, branch.inner.entities);
+            return stack_minimum_size(ext, branch.inner.windows);
         case NodeKind.FORK:
             return fork_minimum_size(ext, tiler, branch.inner.fork);
     }
 }
 
-function window_minimum_size(ext: Ext, entity: Entity): [number, number] {
-    return ext.windows.get(entity)?.minimum_size() ?? [0, 0];
-}
-
 /** Gets the stack's minimum size based on its windows and the tab bar. */
-function stack_minimum_size(ext: Ext, entities: Entity[]): [number, number] {
+function stack_minimum_size(ext: Ext, windows: MutterWindowHandle[]): [number, number] {
     let width = 0;
     let height = 0;
-    for (const entity of entities) {
-        const [window_width, window_height] = window_minimum_size(ext, entity);
+    for (const window of windows) {
+        const [window_width, window_height] = window.minimum_size();
         width = Math.max(width, window_width);
         height = Math.max(height, window_height);
     }

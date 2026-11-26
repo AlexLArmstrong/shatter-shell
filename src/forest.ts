@@ -119,7 +119,7 @@ export class Forest extends Ecs.World {
         }
     }
 
-    attach_fork(ext: Ext, fork: Fork.Fork, window: Entity, is_left: boolean) {
+    attach_fork(ext: Ext, fork: Fork.Fork, window: MutterWindowHandle, is_left: boolean) {
         const node = Node.Node.window(window);
 
         if (is_left) {
@@ -133,9 +133,9 @@ export class Forest extends Ecs.World {
                 )[0];
                 fork.right = Node.Node.fork(this.forks.get(new_fork)!);
                 this.parents.insert(new_fork, fork.entity);
-                this.on_attach(new_fork, window);
+                this.on_attach(new_fork, window.entity);
             } else {
-                this.on_attach(fork.entity, window);
+                this.on_attach(fork.entity, window.entity);
                 fork.right = fork.left;
             }
 
@@ -151,15 +151,15 @@ export class Forest extends Ecs.World {
                 )[0];
                 fork.left = Node.Node.fork(this.forks.get(new_fork)!);
                 this.parents.insert(new_fork, fork.entity);
-                this.on_attach(new_fork, window);
+                this.on_attach(new_fork, window.entity);
             } else {
-                this.on_attach(fork.entity, window);
+                this.on_attach(fork.entity, window.entity);
             }
 
             fork.right = node;
         }
 
-        this.on_attach(fork.entity, window);
+        this.on_attach(fork.entity, window.entity);
     }
 
     attach_stack(
@@ -176,9 +176,9 @@ export class Forest extends Ecs.World {
                 window.stack = stack.idx;
 
                 if (stack_from_left) {
-                    stack.entities.push(new_entity);
+                    stack.windows.push(window);
                 } else {
-                    stack.entities.unshift(new_entity);
+                    stack.windows.unshift(window);
                 }
 
                 this.on_attach(fork.entity, new_entity);
@@ -204,10 +204,12 @@ export class Forest extends Ecs.World {
     attach_window(
         ext: Ext,
         onto_entity: Entity,
-        new_entity: Entity,
+        new_window: MutterWindowHandle,
         place_by: MoveBy,
         stack_from_left: boolean,
     ): [Entity, Fork.Fork] | null {
+        const new_entity = new_window.entity;
+
         /** Place a window in a fork based on where the window was originally located */
         function place_by_keyboard(fork: Fork.Fork, src: Mtk.Rectangle, left: Mtk.Rectangle, right: Mtk.Rectangle) {
             const from: [number, number] = [src.x + src.width / 2, src.y + src.height / 2];
@@ -286,7 +288,7 @@ export class Forest extends Ecs.World {
             return this._attach(onto_entity, new_entity, this.on_attach, entity, fork, [fork_entity, new_fork]);
         };
 
-        const right_node = Node.Node.window(new_entity);
+        const right_node = Node.Node.window(new_window);
 
         for (const [entity, fork] of this.forks.iter()) {
             if (fork.left.is_window(onto_entity)) {
@@ -374,7 +376,7 @@ export class Forest extends Ecs.World {
     }
 
     /** Create a new top level fork */
-    create_toplevel(window: Entity, area: Mtk.Rectangle, id: MonitorWorkspaceID): [Entity, Fork.Fork] {
+    create_toplevel(window: MutterWindowHandle, area: Mtk.Rectangle, id: MonitorWorkspaceID): [Entity, Fork.Fork] {
         const [entity, fork] = this.create_fork(Node.Node.window(window), null, area, id[1], id[0]);
 
         this.string_reps.with(entity, sid => {
@@ -574,9 +576,8 @@ export class Forest extends Ecs.World {
         let largest_window = null;
         let largest_size = 0;
 
-        const window_compare = (entity: Entity) => {
-            const window = ext.windows.get(entity);
-            if (window && window.is_tilable()) {
+        const window_compare = (window: MutterWindowHandle) => {
+            if (window.is_tilable()) {
                 const rect = window.frame();
                 const size = rect.width * rect.height;
                 if (size > largest_size) {
@@ -589,10 +590,10 @@ export class Forest extends Ecs.World {
         for (const node of this.iter(entity)) {
             switch (node.inner.kind) {
                 case Node.NodeKind.WINDOW:
-                    window_compare(node.inner.entity);
+                    window_compare(node.inner.window);
                     break;
                 case Node.NodeKind.STACK:
-                    window_compare(node.inner.entities[0]!);
+                    window_compare(node.inner.windows[0]!);
                     break;
                 case Node.NodeKind.FORK:
                     break;
@@ -670,10 +671,10 @@ export class Forest extends Ecs.World {
                         this.parents.insert(inner.fork.entity, p);
                         break;
                     case Node.NodeKind.WINDOW:
-                        this.on_attach(p, inner.entity);
+                        this.on_attach(p, inner.window.entity);
                         break;
                     case Node.NodeKind.STACK:
-                        for (const entity of inner.entities) this.on_attach(p, entity);
+                        for (const window of inner.windows) this.on_attach(p, window.entity);
                 }
             }
 
@@ -693,11 +694,11 @@ export class Forest extends Ecs.World {
                 this.parents.insert(sibling.inner.fork.entity, parent);
                 break;
             case Node.NodeKind.WINDOW:
-                this.on_attach(parent, sibling.inner.entity);
+                this.on_attach(parent, sibling.inner.window.entity);
                 break;
             case Node.NodeKind.STACK:
-                for (const entity of sibling.inner.entities) {
-                    this.on_attach(parent, entity);
+                for (const window of sibling.inner.windows) {
+                    this.on_attach(parent, window.entity);
                 }
         }
     }
@@ -738,7 +739,7 @@ export class Forest extends Ecs.World {
 
     /** Removes window from stack, destroying the stack if it was the last window. */
     private remove_from_stack(ext: Ext, stack: Node.NodeStack, window: Entity, on_last: () => void) {
-        if (stack.entities.length === 1) {
+        if (stack.windows.length === 1) {
             this.stacks.remove(stack.idx)?.destroy();
             on_last();
         } else {
