@@ -1,11 +1,13 @@
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
+import type { NodeStack } from './node.js';
 import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
 import * as Ecs from './ecs.js';
 import { workspaceID } from './lib.js';
+import * as Node from './node.js';
 
 const Arena = a.Arena;
 import Atk from 'gi://Atk';
@@ -27,7 +29,6 @@ export const TAB_HEIGHT_UNSCALED = 43 as const;
 const TAB_SEPARATION_UNSCALED = 3 as const;
 
 interface Tab {
-    active: boolean;
     entity: Entity;
     button: number;
     button_signal: SignalID | null;
@@ -144,13 +145,7 @@ export class Stack {
 
     widgets: StackWidgets | null = null;
 
-    /** The currently active tab */
-    active: Entity;
-    /** The currently active tab's index */
-    active_id: number = 0;
-
-    prev_active: Entity | null = null;
-    prev_active_id: number = 0;
+    readonly node: NodeStack;
 
     tabs: Array<Tab> = [];
 
@@ -164,7 +159,7 @@ export class Stack {
 
     stack_rect: Mtk.Rectangle = new Mtk.Rectangle({ x: 0, y: 0, width: 0, height: 0 });
 
-    private active_signals: [SignalID, SignalID] | null = null;
+    private active_signals: [Meta.Window, SignalID, SignalID] | null = null;
 
     private rect: Mtk.Rectangle = new Mtk.Rectangle({ x: 0, y: 0, width: 0, height: 0 });
 
@@ -174,9 +169,9 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, active: Entity, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeStack, workspace: WorkspaceID) {
         this.ext = ext;
-        this.active = active;
+        this.node = node;
         this.initial_workspace = workspace;
         this.tab_height = TAB_HEIGHT_UNSCALED * this.ext.sizes.scale;
         this.tab_separation = TAB_SEPARATION_UNSCALED * this.ext.sizes.scale;
@@ -188,6 +183,37 @@ export class Stack {
         this.reposition();
 
         this.tabs_destroy = this.widgets.tabs.connect('destroy', () => this.recreate_widgets());
+    }
+
+    get active(): Entity {
+        return this.node.active.entity;
+    }
+
+    get prev_active(): Entity | null {
+        return this.node.prev_active?.entity ?? null;
+    }
+
+    get active_id(): number {
+        return this.tabs.findIndex(tab => Ecs.entity_eq(tab.entity, this.active));
+    }
+
+    sync() {
+        if (!this.widgets) return;
+
+        const windows = this.node.windows;
+        const same =
+            this.tabs.length === windows.length
+            && this.tabs.every((tab, idx) => {
+                const window = windows[idx];
+                return window !== undefined && Ecs.entity_eq(tab.entity, window.entity);
+            });
+
+        if (!same) {
+            this.clear();
+            for (const window of windows) this.add(window);
+        }
+
+        this.show_active();
     }
 
     /** Adds a new window to the stack */
@@ -202,7 +228,7 @@ export class Stack {
         button.set_active(active ? TabActive.active : TabActive.inactive);
         const id = this.buttons.insert(button);
 
-        const tab: Tab = { active, entity, signals: [], button: id, button_signal: null };
+        const tab: Tab = { entity, signals: [], button: id, button_signal: null };
         this.bind_hint_events(tab);
         this.tabs.push(tab);
         this.update_focus();
@@ -216,54 +242,33 @@ export class Stack {
         }
     }
 
-    /** Activates a tab based on the previously active entry */
-    auto_activate(): Entity | null {
-        if (this.tabs.length === 0) return null;
-
-        if (this.tabs.length <= this.active_id) {
-            this.active_id = this.tabs.length - 1;
-        }
-
-        const c = this.tabs[this.active_id];
-        if (!c) return null;
-
-        this.activate(c.entity);
-        return c.entity;
-    }
-
     activate_prev() {
         if (this.prev_active) {
             this.activate(this.prev_active);
         }
     }
 
-    /** Activates the tab of this entity, and hides other windows. */
     activate(entity: Entity) {
+        Node.stack_activate(this.ext.gnome_forest, this.node, entity);
+    }
+
+    private show_active() {
         const permitted = this.permitted_to_show();
         if (this.widgets) this.widgets.tabs.visible = permitted;
 
-        const win = this.ext.windows.get(entity);
+        const win = this.ext.windows.get(this.active);
         if (!win) return;
 
-        if (!Ecs.entity_eq(entity, this.active)) {
-            this.prev_active = this.active;
-            this.prev_active_id = this.active_id;
-        }
+        this.active_connect(win.meta);
 
-        this.active_connect(win.meta, entity);
-
-        let id = 0;
-        for (const [_idx, tab] of this.tabs.entries()) {
+        for (const tab of this.tabs) {
             let tab_active: TabActive;
 
             this.window_exec(tab, tab.entity, window => {
-                if (Ecs.entity_eq(entity, tab.entity)) {
-                    this.active_id = id;
-                    tab.active = true;
+                if (Ecs.entity_eq(this.active, tab.entity)) {
                     tab_active = TabActive.active;
                     window.visibility.fade_in();
                 } else {
-                    tab.active = false;
                     tab_active = TabActive.inactive;
                     window.visibility.fade_out();
                 }
@@ -273,20 +278,15 @@ export class Stack {
                     button.set_active(tab_active);
                 }
             });
-
-            id += 1;
         }
 
         this.reset_visibility(permitted);
     }
 
     /** Connects `on_window_changed` callbacks to the newly-active window */
-    private active_connect(window: Meta.Window, active: Entity) {
+    private active_connect(window: Meta.Window) {
         // Disconnect before attaching new window as active window
         this.active_disconnect();
-
-        // Memorize them for future calls
-        this.active = active;
 
         this.active_reconnect(window);
     }
@@ -305,6 +305,7 @@ export class Stack {
             });
 
         this.active_signals = [
+            window,
             window.connect('size-changed', on_window_changed),
             window.connect('position-changed', on_window_changed),
         ];
@@ -312,10 +313,9 @@ export class Stack {
 
     /** Disconnects signals from the active window in the stack */
     private active_disconnect() {
-        const active_meta = this.active_meta();
-
-        if (this.active_signals && active_meta) {
-            for (const s of this.active_signals) active_meta.disconnect(s);
+        if (this.active_signals) {
+            const [meta, ...signals] = this.active_signals;
+            for (const s of signals) meta.disconnect(s);
         }
 
         this.active_signals = null;
@@ -371,18 +371,6 @@ export class Stack {
         }
     }
 
-    /** Deactivate the signals belonging to an entity */
-    deactivate(w: MutterWindowHandle) {
-        for (const c of this.tabs)
-            if (Ecs.entity_eq(c.entity, w.entity)) {
-                this.tab_disconnect(c);
-            }
-
-        if (this.active_signals && Ecs.entity_eq(this.active, w.entity)) {
-            this.active_disconnect();
-        }
-    }
-
     /** Disconnects this stack's signal, and destroys its widgets */
     destroy() {
         global.display.disconnect(this.restacker);
@@ -392,13 +380,7 @@ export class Stack {
         // Disconnect stack signals from each window, and unhide them.
         for (const c of this.tabs) {
             this.tab_disconnect(c);
-            if (this.workspace === this.ext.active_workspace()) {
-                const win = this.ext.windows.get(c.entity);
-                if (win) {
-                    win.visibility.fade_in();
-                    win.stack = null;
-                }
-            }
+            if (this.workspace === this.ext.active_workspace()) this.ext.windows.get(c.entity)?.visibility.fade_in();
         }
 
         for (const b of this.buttons.values()) {
@@ -457,86 +439,6 @@ export class Stack {
             if (!window) return;
 
             this.active_reconnect(window.meta);
-        }
-    }
-
-    remove_by_pos(idx: number) {
-        const c = this.tabs[idx];
-        if (c) this.remove_tab_component(c, idx);
-    }
-
-    remove_tab_component(c: Tab, idx: number) {
-        if (!this.widgets) return;
-
-        this.tab_disconnect(c);
-
-        const b = this.buttons.get(c.button);
-        if (b) {
-            this.widgets.tabs.remove_child(b);
-            b.destroy();
-            this.buttons.remove(c.button);
-        }
-
-        this.tabs.splice(idx, 1);
-        this.update_focus();
-    }
-
-    /** Removes the tab associated with the entity */
-    remove_tab(entity: Entity): number | null {
-        if (!this.widgets) return null;
-
-        if (this.prev_active && Ecs.entity_eq(entity, this.prev_active)) {
-            this.prev_active = null;
-            this.prev_active_id = 0;
-        }
-        const was_active = Ecs.entity_eq(entity, this.active);
-
-        let idx = 0;
-        for (const c of this.tabs) {
-            if (Ecs.entity_eq(c.entity, entity)) {
-                this.remove_tab_component(c, idx);
-
-                // Adjust further indices
-                if (this.active_id > idx) this.active_id -= 1;
-                if (this.prev_active_id > idx) this.prev_active_id -= 1;
-                if (this.tabs.length) {
-                    if (this.active_id >= this.tabs.length) this.active_id = this.tabs.length - 1;
-                    if (this.prev_active_id >= this.tabs.length) this.prev_active_id = this.tabs.length - 1;
-                }
-
-                if (was_active && this.prev_active && this.tabs.length) {
-                    // Go to prev_active tab if current tab closed
-                    this.activate(this.prev_active);
-                    // Don't hold a reference to this removed tab
-                    this.prev_active = null;
-                    this.prev_active_id = 0;
-                }
-
-                return idx;
-            }
-            idx += 1;
-        }
-
-        return null;
-    }
-
-    replace(window: MutterWindowHandle) {
-        if (!this.widgets) return;
-        const tab = this.tabs[this.active_id];
-        const actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
-        if (tab && actor) {
-            this.tab_disconnect(tab);
-
-            if (Ecs.entity_eq(window.entity, this.active)) {
-                this.active_connect(window.meta, window.entity);
-                window.visibility.fade_in();
-            } else {
-                window.visibility.fade_out();
-            }
-
-            this.watch_signals(tab, window);
-            this.buttons.get(tab.button)?.set_title(window.title());
-            this.activate(window.entity);
         }
     }
 
@@ -681,17 +583,8 @@ export class Stack {
         tab.button_signal = widget.connect('clicked', () => {
             this.activate(entity);
             this.window_exec(tab, entity, window => {
-                if (!window.actor_exists()) return;
-
-                window.visibility.fade_in();
                 this.ext.register_fn(() => window.request_activate(false));
-
                 this.reposition();
-
-                for (const comp of this.tabs) {
-                    this.buttons.get(comp.button)?.set_active(TabActive.inactive);
-                }
-                widget.set_active(TabActive.active);
             });
         });
 

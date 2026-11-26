@@ -4,7 +4,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
-import type { Node, NodeLeaf } from './node.js';
+import type { Node, NodeLeaf, TabBars } from './node.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
@@ -208,7 +208,7 @@ export class Fork {
     }
 
     /** Replaces the association of a window in a fork with another */
-    replace_window(ext: Ext, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
+    replace_window(tabs: TabBars, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
         let closure = null;
 
         const check_right = () => {
@@ -226,8 +226,7 @@ export class Fork {
                     }
 
                     closure = () => {
-                        node.stack_replace(ext, inner, b);
-                        node.stack_set(inner, idx, b);
+                        node.stack_replace(tabs, inner, a.entity, b);
                     };
                 }
             }
@@ -252,10 +251,8 @@ export class Fork {
                 const inner_s = this.left.inner;
                 const idx = node.stack_find(inner_s, a.entity);
                 if (idx !== null) {
-                    const id = idx;
                     closure = () => {
-                        node.stack_replace(ext, inner_s, b);
-                        node.stack_set(inner_s, id, b);
+                        node.stack_replace(tabs, inner_s, a.entity, b);
                     };
                 } else {
                     check_right();

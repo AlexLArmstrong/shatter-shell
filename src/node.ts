@@ -7,7 +7,7 @@ import type { Fork } from './fork.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
-import { TAB_HEIGHT_UNSCALED, type Stack } from './stack.js';
+import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
 /** A node is either a fork, a window, or a stack. */
 export enum NodeKind {
@@ -33,29 +33,10 @@ export interface NodeStack {
     kind: NodeKind.STACK;
     idx: number;
     windows: Array<MutterWindowHandle>;
+    active: MutterWindowHandle;
+    prev_active: MutterWindowHandle | null;
     rect: Mtk.Rectangle | null;
     parent: Fork | null;
-}
-
-export function stack_add(node: NodeStack, window: MutterWindowHandle, front = false) {
-    if (front) {
-        node.windows.unshift(window);
-    } else {
-        node.windows.push(window);
-    }
-    node.parent?.hold_window(node, window);
-}
-
-export function stack_set(node: NodeStack, idx: number, window: MutterWindowHandle) {
-    const previous = node.windows[idx];
-    node.windows[idx] = window;
-    node.parent?.hold_window(node, window);
-    if (previous) node.parent?.let_go_window(node, previous);
-}
-
-function stack_take(node: NodeStack, idx: number) {
-    const [window] = node.windows.splice(idx, 1);
-    if (window) node.parent?.let_go_window(node, window);
 }
 
 export function window_set(node: NodeWindow, window: MutterWindowHandle) {
@@ -65,100 +46,120 @@ export function window_set(node: NodeWindow, window: MutterWindowHandle) {
     node.parent?.let_go_window(node, previous);
 }
 
-function stack_detach(node: NodeStack, stack: Stack, idx: number) {
-    stack_take(node, idx);
-    stack.remove_by_pos(idx);
+/*
+ * A stack's windows, their order, and which of them is active only change through the functions
+ * below, which draw the stack again before they return.
+ */
+
+export interface TabBars {
+    update_stack(stack: NodeStack): void;
+}
+
+function sync_tabs(tabs: TabBars | null, node: NodeStack) {
+    tabs?.update_stack(node);
 }
 
 export function stack_find(node: NodeStack, entity: Entity) {
-    let idx = 0;
-    while (idx < node.windows.length) {
-        if (Ecs.entity_eq(entity, node.windows[idx]!.entity)) {
-            return idx;
-        }
-        idx += 1;
-    }
-
-    return null;
+    const idx = node.windows.findIndex(other => Ecs.entity_eq(entity, other.entity));
+    return idx === -1 ? null : idx;
 }
 
-/** Move the window in a stack to the left, and detach if it it as the end. */
-export function stack_move_left(ext: Ext, forest: Forest, node: NodeStack, entity: Entity): boolean {
-    const stack = forest.stacks.get(node.idx);
-    if (!stack) return false;
+export function stack_activate(tabs: TabBars | null, node: NodeStack, entity: Entity) {
+    const idx = stack_find(node, entity);
+    const window = idx === null ? undefined : node.windows[idx];
+    if (!window) return;
 
-    let idx = 0;
-    for (const cmp of node.windows) {
-        if (Ecs.entity_eq(cmp.entity, entity)) {
-            if (idx === 0) {
-                // Remove the window from the stack
-                stack_detach(node, stack, 0);
-                return false;
-            } else {
-                // Swap tabs in the stack
-                stack_swap(node, idx - 1, idx);
-                stack.active_id -= 1;
-                ext.gnome_forest?.update_stack(node);
-                return true;
-            }
-        }
-
-        idx += 1;
+    if (node.active !== window) {
+        node.prev_active = node.active;
+        node.active = window;
     }
 
-    return false;
+    sync_tabs(tabs, node);
 }
 
-/** Move the window in a stack to the right, and detach if it is at the end. */
-export function stack_move_right(ext: Ext, forest: Forest, node: NodeStack, entity: Entity): boolean {
-    const stack = forest.stacks.get(node.idx);
-    if (!stack) return false;
-
-    let moved = false;
-    let idx = 0;
-    const max = node.windows.length - 1;
-    for (const cmp of node.windows) {
-        if (Ecs.entity_eq(cmp.entity, entity)) {
-            if (idx === max) {
-                stack_detach(node, stack, idx);
-                moved = false;
-            } else {
-                stack_swap(node, idx + 1, idx);
-                stack.active_id += 1;
-                ext.gnome_forest?.update_stack(node);
-                moved = true;
-            }
-            break;
-        }
-
-        idx += 1;
+export function stack_insert(tabs: TabBars | null, node: NodeStack, window: MutterWindowHandle, at_end: boolean) {
+    if (at_end) {
+        node.windows.push(window);
+    } else {
+        node.windows.unshift(window);
     }
+    node.parent?.hold_window(node, window);
 
-    return moved;
-}
-
-export function stack_replace(ext: Ext, node: NodeStack, window: MutterWindowHandle) {
-    if (!ext.gnome_forest) return;
-
-    const stack = ext.gnome_forest.forest.stacks.get(node.idx);
-    if (!stack) return;
-
-    stack.replace(window);
+    sync_tabs(tabs, node);
 }
 
 /** Removes a window from a stack */
-export function stack_remove(forest: Forest, node: NodeStack, entity: Entity) {
-    const stack = forest.stacks.get(node.idx);
-    if (!stack) return null;
-    const idx = stack.remove_tab(entity);
-    if (idx !== null) stack_take(node, idx);
+export function stack_remove(tabs: TabBars | null, node: NodeStack, entity: Entity): number | null {
+    const idx = stack_find(node, entity);
+    if (idx === null) return null;
+
+    const [window] = node.windows.splice(idx, 1);
+    if (!window) return null;
+    node.parent?.let_go_window(node, window);
+
+    if (node.prev_active === window) node.prev_active = null;
+
+    if (node.active === window) {
+        const next = node.prev_active ?? node.windows[Math.min(idx, node.windows.length - 1)];
+        if (next) node.active = next;
+        node.prev_active = null;
+    }
+
+    sync_tabs(tabs, node);
     return idx;
 }
 
-function stack_swap(node: NodeStack, from: number, to: number) {
-    const tmp = node.windows[from];
-    node.windows[from] = node.windows[to]!;
-    node.windows[to] = tmp!;
+export function stack_replace(tabs: TabBars | null, node: NodeStack, old: Entity, window: MutterWindowHandle) {
+    const idx = stack_find(node, old);
+    const previous = idx === null ? undefined : node.windows[idx];
+    if (idx === null || !previous) return;
+
+    node.windows[idx] = window;
+    node.parent?.hold_window(node, window);
+    // A window that replaced itself stays linked
+    if (stack_find(node, old) === null) node.parent?.let_go_window(node, previous);
+    if (node.active === previous) node.active = window;
+    if (node.prev_active === previous) node.prev_active = window;
+
+    sync_tabs(tabs, node);
+}
+
+function stack_swap(tabs: TabBars | null, node: NodeStack, from: number, to: number) {
+    const a = node.windows[from];
+    const b = node.windows[to];
+    if (a === undefined || b === undefined) return;
+
+    node.windows[from] = b;
+    node.windows[to] = a;
+    sync_tabs(tabs, node);
+}
+
+/** Move the window in a stack to the left, and detach if it it as the end. */
+export function stack_move_left(tabs: TabBars | null, node: NodeStack, entity: Entity): boolean {
+    const idx = stack_find(node, entity);
+    if (idx === null) return false;
+
+    if (idx === 0) {
+        stack_remove(tabs, node, entity);
+        return false;
+    }
+
+    stack_swap(tabs, node, idx - 1, idx);
+    return true;
+}
+
+/** Move the window in a stack to the right, and detach if it is at the end. */
+export function stack_move_right(tabs: TabBars | null, node: NodeStack, entity: Entity): boolean {
+    const idx = stack_find(node, entity);
+    if (idx === null) return false;
+
+    if (idx === node.windows.length - 1) {
+        stack_remove(tabs, node, entity);
+        return false;
+    }
+
+    stack_swap(tabs, node, idx + 1, idx);
+    return true;
 }
 
 export type NodeLeaf = NodeWindow | NodeStack;
@@ -188,6 +189,8 @@ export class Node<T extends NodeADT = NodeADT> {
         return new Node({
             kind: NodeKind.STACK,
             windows: [window],
+            active: window,
+            prev_active: null,
             idx,
             rect: null,
             parent: null,

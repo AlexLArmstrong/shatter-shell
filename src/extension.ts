@@ -616,7 +616,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                 const prev_window = this.windows.get(prev);
                 if (prev_window) {
                     if (prev_window.stack !== stack) {
-                        stack_object.auto_activate();
                         this.focus_history.restart_from(stack_object.active);
                         this.windows.get(stack_object.active)?.request_activate();
                     }
@@ -846,12 +845,10 @@ export class Ext extends Ecs.System<ExtEvent> {
                             if (stack) {
                                 const stack_info = gnome_forest.find_stack(stack.active);
                                 if (stack_info) {
-                                    const leaf: node.NodeStack = stack_info[1].inner;
+                                    const stack_node: node.NodeStack = stack_info[1].inner;
 
-                                    win.stack = attachment;
-                                    node.stack_add(leaf, win);
-                                    gnome_forest.update_stack(leaf);
                                     this.remember_place(win.entity);
+                                    node.stack_insert(gnome_forest, stack_node, win, true);
                                     stack.activate(win.entity);
                                     gnome_forest.tile(fork, fork.area);
                                     return;

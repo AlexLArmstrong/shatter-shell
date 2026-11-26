@@ -284,10 +284,8 @@ export class GnomeTilingMode {
         if (!this.ext.gnome_forest) return;
 
         const inner = branch.inner;
-        Node.stack_remove(this.ext.gnome_forest.forest, inner, focused.entity);
+        Node.stack_remove(this.ext.gnome_forest, inner, focused.entity);
         this.ext.gnome_forest.detach_window(focused.entity);
-
-        focused.stack = null;
 
         if (fork.right) {
             let left, right;
@@ -343,12 +341,10 @@ export class GnomeTilingMode {
             fork.set_area(rect);
         }
 
-        const forest = this.ext.gnome_forest.forest;
         const fentity = focused.entity;
 
         const detach = (orientation: Clutter.Orientation, reverse: boolean) => {
             if (!this.ext.gnome_forest) return;
-            focused.stack = null;
 
             if (fork.right) {
                 let left, right;
@@ -377,9 +373,9 @@ export class GnomeTilingMode {
         switch (direction) {
             case Direction.Left:
                 if (force_detach) {
-                    Node.stack_remove(forest, inner, fentity);
+                    Node.stack_remove(this.ext.gnome_forest, inner, fentity);
                     detach(Clutter.Orientation.HORIZONTAL, false);
-                } else if (!Node.stack_move_left(this.ext, forest, inner, fentity)) {
+                } else if (!Node.stack_move_left(this.ext.gnome_forest, inner, fentity)) {
                     detach(Clutter.Orientation.HORIZONTAL, false);
                 }
 
@@ -388,9 +384,9 @@ export class GnomeTilingMode {
 
             case Direction.Right:
                 if (force_detach) {
-                    Node.stack_remove(forest, inner, fentity);
+                    Node.stack_remove(this.ext.gnome_forest, inner, fentity);
                     detach(Clutter.Orientation.HORIZONTAL, true);
-                } else if (!Node.stack_move_right(this.ext, forest, inner, fentity)) {
+                } else if (!Node.stack_move_right(this.ext.gnome_forest, inner, fentity)) {
                     detach(Clutter.Orientation.HORIZONTAL, true);
                 }
 
@@ -398,12 +394,12 @@ export class GnomeTilingMode {
                 break;
 
             case Direction.Up:
-                Node.stack_remove(forest, inner, fentity);
+                Node.stack_remove(this.ext.gnome_forest, inner, fentity);
                 detach(Clutter.Orientation.VERTICAL, false);
                 break;
 
             case Direction.Down:
-                Node.stack_remove(forest, inner, fentity);
+                Node.stack_remove(this.ext.gnome_forest, inner, fentity);
                 detach(Clutter.Orientation.VERTICAL, true);
                 break;
         }
@@ -570,8 +566,7 @@ export class GnomeTilingMode {
                             }
 
                             if (fork.left.inner.kind === Node.NodeKind.STACK) {
-                                Node.stack_remove(gnome_forest.forest, fork.left.inner, focused.entity);
-                                focused.stack = null;
+                                Node.stack_remove(this.ext.gnome_forest, fork.left.inner, focused.entity);
                             } else {
                                 const temp = fork.right;
 
