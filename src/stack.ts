@@ -1,13 +1,12 @@
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { MutterWindowHandle } from './gnome/mutter_window_handle.js';
-import type { NodeStack } from './node.js';
+import type { NodeLeaf } from './node.js';
 import type * as Settings from './settings.js';
 
 import * as a from './arena.js';
 import * as Ecs from './ecs.js';
 import { workspaceID } from './lib.js';
-import * as Node from './node.js';
 
 const Arena = a.Arena;
 import Atk from 'gi://Atk';
@@ -145,7 +144,7 @@ export class Stack {
 
     widgets: StackWidgets | null = null;
 
-    readonly node: NodeStack;
+    readonly node: NodeLeaf;
 
     tabs: Array<Tab> = [];
 
@@ -169,7 +168,7 @@ export class Stack {
 
     private tabs_destroy: SignalID;
 
-    constructor(ext: Ext, node: NodeStack, workspace: WorkspaceID) {
+    constructor(ext: Ext, node: NodeLeaf, workspace: WorkspaceID) {
         this.ext = ext;
         this.node = node;
         this.initial_workspace = workspace;
@@ -249,7 +248,7 @@ export class Stack {
     }
 
     activate(entity: Entity) {
-        Node.stack_activate(this.ext.gnome_forest, this.node, entity);
+        this.node.activate(this.ext.gnome_forest, entity);
     }
 
     private show_active() {

@@ -76,7 +76,7 @@ export class MutterWindowHandle implements WindowHandle {
     private border_size = 0;
 
     get stack(): number | null {
-        return this.leaf?.kind === NodeKind.STACK ? this.leaf.idx : null;
+        return this.leaf?.kind === NodeKind.LEAF ? this.leaf.idx : null;
     }
 
     constructor(entity: Entity, window: Meta.Window, window_app: Shell.App, ext: Ext) {

@@ -6,7 +6,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import type { Entity } from '../ecs.js';
 import type { Ext } from '../extension.js';
-import type { NodeStack } from '../node.js';
+import type { NodeLeaf } from '../node.js';
 
 import * as geom from '../core/geom.js';
 import { calculate } from '../core/movement.js';
@@ -168,7 +168,7 @@ export class GnomeTilingMode {
     }
 
     unstack_from_fork(
-        stack: NodeStack,
+        stack: NodeLeaf,
         focused: window.MutterWindowHandle,
         fork: Fork,
         left: Node.Node,
@@ -240,7 +240,7 @@ export class GnomeTilingMode {
     }
 
     move_alongside_stack(
-        [fork, branch, is_left]: [Fork, Node.Node<NodeStack>, boolean],
+        [fork, branch, is_left]: [Fork, Node.Node<NodeLeaf>, boolean],
         focused: window.MutterWindowHandle,
         direction: Direction,
     ) {
@@ -284,7 +284,7 @@ export class GnomeTilingMode {
         if (!this.ext.gnome_forest) return;
 
         const inner = branch.inner;
-        Node.stack_remove(this.ext.gnome_forest, inner, focused.entity);
+        inner.remove(this.ext.gnome_forest, focused.entity);
         this.ext.gnome_forest.detach_window(focused.entity);
 
         if (fork.right) {
@@ -312,7 +312,7 @@ export class GnomeTilingMode {
     }
 
     move_from_stack(
-        [fork, branch, is_left]: [Fork, Node.Node<NodeStack>, boolean],
+        [fork, branch, is_left]: [Fork, Node.Node<NodeLeaf>, boolean],
         focused: window.MutterWindowHandle,
         direction: Direction,
         force_detach: boolean = false,
@@ -373,9 +373,9 @@ export class GnomeTilingMode {
         switch (direction) {
             case Direction.Left:
                 if (force_detach) {
-                    Node.stack_remove(this.ext.gnome_forest, inner, fentity);
+                    inner.remove(this.ext.gnome_forest, fentity);
                     detach(Clutter.Orientation.HORIZONTAL, false);
-                } else if (!Node.stack_move_left(this.ext.gnome_forest, inner, fentity)) {
+                } else if (!inner.move_left(this.ext.gnome_forest, fentity)) {
                     detach(Clutter.Orientation.HORIZONTAL, false);
                 }
 
@@ -384,9 +384,9 @@ export class GnomeTilingMode {
 
             case Direction.Right:
                 if (force_detach) {
-                    Node.stack_remove(this.ext.gnome_forest, inner, fentity);
+                    inner.remove(this.ext.gnome_forest, fentity);
                     detach(Clutter.Orientation.HORIZONTAL, true);
-                } else if (!Node.stack_move_right(this.ext.gnome_forest, inner, fentity)) {
+                } else if (!inner.move_right(this.ext.gnome_forest, fentity)) {
                     detach(Clutter.Orientation.HORIZONTAL, true);
                 }
 
@@ -394,12 +394,12 @@ export class GnomeTilingMode {
                 break;
 
             case Direction.Up:
-                Node.stack_remove(this.ext.gnome_forest, inner, fentity);
+                inner.remove(this.ext.gnome_forest, fentity);
                 detach(Clutter.Orientation.VERTICAL, false);
                 break;
 
             case Direction.Down:
-                Node.stack_remove(this.ext.gnome_forest, inner, fentity);
+                inner.remove(this.ext.gnome_forest, fentity);
                 detach(Clutter.Orientation.VERTICAL, true);
                 break;
         }
@@ -565,8 +565,8 @@ export class GnomeTilingMode {
                                 return;
                             }
 
-                            if (fork.left.inner.kind === Node.NodeKind.STACK) {
-                                Node.stack_remove(this.ext.gnome_forest, fork.left.inner, focused.entity);
+                            if (fork.left.is_leaf() && fork.left.inner.tabbed) {
+                                fork.left.inner.remove(this.ext.gnome_forest, focused.entity);
                             } else {
                                 const temp = fork.right;
 
