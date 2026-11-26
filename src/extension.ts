@@ -594,12 +594,15 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (entity) {
                 const fork = this.gnome_forest.forest.forks.get(entity);
                 if (fork?.right && fork.right.is_window(win)) {
+                    const inner = fork.right.inner;
                     const entity =
-                        fork.right.inner.kind === node.NodeKind.STACK
-                            ? fork.right.inner.entities[0]!
-                            : fork.right.inner.entity;
+                        inner.kind === node.NodeKind.STACK
+                            ? inner.entities[0]
+                            : inner.kind === node.NodeKind.WINDOW
+                              ? inner.entity
+                              : undefined;
 
-                    this.windows.with(entity, sibling => sibling.request_activate());
+                    if (entity) this.windows.with(entity, sibling => sibling.request_activate());
                 }
             }
         }
@@ -993,8 +996,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         fork.workspace = value;
                         for (const child of this.gnome_forest.forest.iter(entity)) {
                             if (child.inner.kind === node.NodeKind.FORK) {
-                                fork = this.gnome_forest.forest.forks.get(child.inner.entity);
-                                if (fork) fork.workspace = value;
+                                child.inner.fork.workspace = value;
                             } else if (child.inner.kind === node.NodeKind.WINDOW) {
                                 window_move(this, child.inner.entity, value);
                             } else if (child.inner.kind === node.NodeKind.STACK) {

@@ -131,7 +131,7 @@ export class Forest extends Ecs.World {
                     fork.workspace,
                     fork.monitor,
                 )[0];
-                fork.right = Node.Node.fork(new_fork);
+                fork.right = Node.Node.fork(this.forks.get(new_fork)!);
                 this.parents.insert(new_fork, fork.entity);
                 this.on_attach(new_fork, window);
             } else {
@@ -149,7 +149,7 @@ export class Forest extends Ecs.World {
                     fork.workspace,
                     fork.monitor,
                 )[0];
-                fork.left = Node.Node.fork(new_fork);
+                fork.left = Node.Node.fork(this.forks.get(new_fork)!);
                 this.parents.insert(new_fork, fork.entity);
                 this.on_attach(new_fork, window);
             } else {
@@ -253,7 +253,7 @@ export class Forest extends Ecs.World {
 
             const [fork_entity, new_fork] = this.create_fork(fork.left, right_node, area, fork.workspace, fork.monitor);
 
-            fork.left = Node.Node.fork(fork_entity);
+            fork.left = Node.Node.fork(new_fork);
             this.parents.insert(fork_entity, entity);
 
             const [left, right] = area_of_halves(new_fork);
@@ -277,7 +277,7 @@ export class Forest extends Ecs.World {
                 fork.monitor,
             );
 
-            fork.right = Node.Node.fork(fork_entity);
+            fork.right = Node.Node.fork(new_fork);
             this.parents.insert(fork_entity, entity);
 
             const [left, right] = area_of_halves(new_fork);
@@ -387,6 +387,7 @@ export class Forest extends Ecs.World {
     /** Deletes a fork entity from the world, performing any cleanup necessary */
     override delete_entity(entity: Entity) {
         const fork = this.forks.remove(entity);
+        if (fork) fork.detached = true;
         if (fork && fork.is_toplevel) {
             const id = this.string_reps.get(entity);
             if (id != null) this.toplevel.delete(id);
@@ -415,7 +416,7 @@ export class Forest extends Ecs.World {
                 reflow_fork = [fork_entity, fork];
                 switch (fork.right.inner.kind) {
                     case Node.NodeKind.FORK:
-                        this.reassign_children_to_parent(fork_entity, fork.right.inner.entity, fork);
+                        this.reassign_children_to_parent(fork_entity, fork.right.inner.fork.entity, fork);
                         break;
                     case Node.NodeKind.WINDOW:
                     case Node.NodeKind.STACK:
@@ -455,7 +456,7 @@ export class Forest extends Ecs.World {
 
                     switch (fork.left.inner.kind) {
                         case Node.NodeKind.FORK:
-                            this.reassign_children_to_parent(fork_entity, fork.left.inner.entity, fork);
+                            this.reassign_children_to_parent(fork_entity, fork.left.inner.fork.entity, fork);
                             break;
                         case Node.NodeKind.WINDOW:
                         case Node.NodeKind.STACK:
@@ -550,16 +551,16 @@ export class Forest extends Ecs.World {
         while (fork) {
             {
                 if (fork.left.inner.kind === Node.NodeKind.FORK) {
-                    const child = this.forks.get(fork.left.inner.entity);
-                    if (child != null) forks.push(child);
+                    const child = fork.left.inner.fork;
+                    if (!child.detached) forks.push(child);
                 }
                 yield fork.left;
             }
 
             if (fork.right) {
                 if (fork.right.inner.kind === Node.NodeKind.FORK) {
-                    const child = this.forks.get(fork.right.inner.entity);
-                    if (child != null) forks.push(child);
+                    const child = fork.right.inner.fork;
+                    if (!child.detached) forks.push(child);
                 }
                 yield fork.right;
             }
@@ -666,7 +667,7 @@ export class Forest extends Ecs.World {
 
                 switch (inner.kind) {
                     case Node.NodeKind.FORK:
-                        this.parents.insert(inner.entity, p);
+                        this.parents.insert(inner.fork.entity, p);
                         break;
                     case Node.NodeKind.WINDOW:
                         this.on_attach(p, inner.entity);
@@ -689,7 +690,7 @@ export class Forest extends Ecs.World {
     private reassign_sibling(sibling: Node.Node, parent: Entity) {
         switch (sibling.inner.kind) {
             case Node.NodeKind.FORK:
-                this.parents.insert(sibling.inner.entity, parent);
+                this.parents.insert(sibling.inner.fork.entity, parent);
                 break;
             case Node.NodeKind.WINDOW:
                 this.on_attach(parent, sibling.inner.entity);

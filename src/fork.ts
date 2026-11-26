@@ -26,6 +26,7 @@ export class Fork {
     right: Node | null;
     area: Mtk.Rectangle;
     entity: Entity;
+    detached: boolean = false;
     on_primary_display: boolean;
     workspace: WorkspaceID;
     length_left: number;
@@ -304,8 +305,8 @@ export class Fork {
             for (const child of forest.iter(this.entity)) {
                 switch (child.inner.kind) {
                     case NodeKind.FORK:
-                        const cfork = forest.forks.get(child.inner.entity);
-                        if (!cfork) continue;
+                        const cfork = child.inner.fork;
+                        if (cfork.detached) continue;
                         cfork.workspace = workspace;
                         cfork.monitor = monitor;
                         cfork.on_primary_display = primary;
@@ -401,7 +402,7 @@ function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
         case NodeKind.STACK:
             return stack_minimum_size(ext, branch.inner.entities);
         case NodeKind.FORK:
-            return fork_minimum_size(ext, tiler, branch.inner.entity);
+            return fork_minimum_size(ext, tiler, branch.inner.fork);
     }
 }
 
@@ -422,9 +423,8 @@ function stack_minimum_size(ext: Ext, entities: Entity[]): [number, number] {
 }
 
 /** Gets the fork's minimum size based on its left and right nodes. */
-function fork_minimum_size(ext: Ext, tiler: Forest, entity: Entity): [number, number] {
-    const fork = tiler.forks.get(entity);
-    if (!fork) return [0, 0];
+function fork_minimum_size(ext: Ext, tiler: Forest, fork: Fork): [number, number] {
+    if (fork.detached) return [0, 0];
 
     const [left_width, left_height] = minimum_size(tiler, ext, fork.left);
     if (!fork.right) return [left_width, left_height];

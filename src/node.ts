@@ -3,6 +3,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
+import type { Fork } from './fork.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
@@ -15,10 +16,9 @@ export enum NodeKind {
     STACK = 3,
 }
 
-/** Identifies this node as a fork */
 export interface NodeFork {
     kind: NodeKind.FORK;
-    entity: Entity;
+    fork: Fork;
 }
 
 /** Identifies this node as a window */
@@ -142,8 +142,8 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Create a fork variant of a `Node` */
-    static fork(entity: Entity): Node<NodeFork> {
-        return new Node({ kind: NodeKind.FORK, entity });
+    static fork(fork: Fork): Node<NodeFork> {
+        return new Node({ kind: NodeKind.FORK, fork });
     }
 
     /** Create the window variant of a `Node` */
@@ -173,7 +173,7 @@ export class Node<T extends NodeADT = NodeADT> {
 
     /** Asks if this fork is the fork we are looking for */
     is_fork(entity: Entity): boolean {
-        return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.entity, entity);
+        return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.fork.entity, entity);
     }
 
     /** Asks if this window is the window we are looking for */
@@ -191,8 +191,8 @@ export class Node<T extends NodeADT = NodeADT> {
     ) {
         switch (this.inner.kind) {
             case NodeKind.FORK:
-                const fork = tiler.forks.get(this.inner.entity);
-                if (fork) {
+                const fork = this.inner.fork;
+                if (!fork.detached) {
                     fork.measure(tiler, ext, area, record);
                 }
 
