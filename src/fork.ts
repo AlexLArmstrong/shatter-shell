@@ -39,7 +39,7 @@ export class Fork {
     orientation;
 
     orientation_changed: boolean = false;
-    is_toplevel: boolean = false;
+    is_root: boolean = false;
 
     smart_gapped: boolean = false;
 
@@ -207,10 +207,10 @@ export class Fork {
         return this;
     }
 
-    /** Defines this fork as a top level fork, and records it in the forest */
-    set_toplevel(tiler: Forest, entity: Entity, string: string, id: MonitorWorkspaceID): Fork {
-        this.is_toplevel = true;
-        tiler.toplevel.set(string, [entity, id]);
+    /** Makes this fork the root of a tree, and records it in the forest */
+    set_root(tiler: Forest, entity: Entity, string: string, id: MonitorWorkspaceID): Fork {
+        this.is_root = true;
+        tiler.trees.set(string, [entity, id]);
         return this;
     }
 
@@ -225,7 +225,7 @@ export class Fork {
 
         const manually_moved = ext.grab.window !== null || ext.gnome_tiling_mode.resizing_window;
 
-        if (!this.is_toplevel) {
+        if (!this.is_root) {
             if (this.orientation_changed) {
                 this.orientation_changed = false;
                 ratio = this.length_left / this.depth();
@@ -291,7 +291,7 @@ export class Fork {
     }
 
     migrate(ext: Ext, forest: Forest, area: Mtk.Rectangle, monitor: MonitorID, workspace: WorkspaceID) {
-        if (ext.gnome_forest && this.is_toplevel) {
+        if (ext.gnome_forest && this.is_root) {
             const primary = global.display.get_primary_monitor() === monitor;
 
             this.monitor = monitor;
@@ -300,7 +300,7 @@ export class Fork {
 
             const blocked = [];
 
-            forest.toplevel.set(forest.string_reps.get(this.entity)!, [this.entity, [monitor, workspace]]);
+            forest.trees.set(forest.string_reps.get(this.entity)!, [this.entity, [monitor, workspace]]);
 
             for (const child of forest.iter(this.entity)) {
                 switch (child.inner.kind) {

@@ -179,9 +179,9 @@ export class GnomeGrab {
             crect.y -= tab_dimension;
         }
 
-        const top_level = forest.find_toplevel(ext.workspace_id());
-        if (top_level) {
-            geom.clamp(crect, forest.forks.get(top_level)!.area);
+        const tree = forest.find_tree(ext.workspace_id());
+        if (tree) {
+            geom.clamp(crect, forest.forks.get(tree)!.area);
         }
 
         const neighbour_rect = (side: EdgeSide) => ext.focus_selector.toward(ext, side, win)?.frame() ?? null;

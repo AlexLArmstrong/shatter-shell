@@ -54,7 +54,7 @@ interface Request {
  */
 export class Forest extends Ecs.World {
     /** Maintains a list of top-level forks. */
-    toplevel: Map<string, [Entity, MonitorWorkspaceID]> = new Map();
+    trees: Map<string, [Entity, MonitorWorkspaceID]> = new Map();
 
     /** Stores window positions that have been requested. */
     requested: Map<Entity, Request> = new Map();
@@ -316,7 +316,7 @@ export class Forest extends Ecs.World {
 
     /** Moves every tree `change` pixels in from each edge, except smart-gapped ones */
     move_in(change: number) {
-        for (const [entity] of this.toplevel.values()) {
+        for (const [entity] of this.trees.values()) {
             const fork = this.forks.get(entity);
             if (!fork || fork.smart_gapped) continue;
 
@@ -329,18 +329,17 @@ export class Forest extends Ecs.World {
 
     /** The trees that hold a single window, with their monitors */
     *lone_trees(): Generator<[Fork.Fork, MonitorID], void> {
-        for (const [entity, [monitor]] of this.toplevel.values()) {
+        for (const [entity, [monitor]] of this.trees.values()) {
             const fork = this.forks.get(entity);
             if (fork?.right === null) yield [fork, monitor];
         }
     }
 
-    /** Create a new top level fork */
-    create_toplevel(window: MutterWindowHandle, area: Mtk.Rectangle, id: MonitorWorkspaceID): [Entity, Fork.Fork] {
+    add_tree(window: MutterWindowHandle, area: Mtk.Rectangle, id: MonitorWorkspaceID): [Entity, Fork.Fork] {
         const [entity, fork] = this.create_fork(Node.Node.window(window), null, area, id[1], id[0]);
 
         this.string_reps.with(entity, sid => {
-            fork.set_toplevel(this, entity, sid, id);
+            fork.set_root(this, entity, sid, id);
         });
 
         return [entity, fork];
@@ -353,9 +352,9 @@ export class Forest extends Ecs.World {
             fork.detached = true;
             fork.leave();
         }
-        if (fork && fork.is_toplevel) {
+        if (fork && fork.is_root) {
             const id = this.string_reps.get(entity);
-            if (id != null) this.toplevel.delete(id);
+            if (id != null) this.trees.delete(id);
         }
 
         super.delete_entity(entity);
@@ -426,10 +425,10 @@ export class Forest extends Ecs.World {
         return reflow_fork;
     }
 
-    /** Finds the top level fork associated with the given entity. */
-    find_toplevel([src_mon, src_work]: MonitorWorkspaceID): Entity | null {
+    /** Finds the tree on a monitor and workspace */
+    find_tree([src_mon, src_work]: MonitorWorkspaceID): Entity | null {
         for (const [entity, fork] of this.forks.iter()) {
-            if (!fork.is_toplevel) continue;
+            if (!fork.is_root) continue;
             const { monitor, workspace } = fork;
             if (monitor == src_mon && workspace == src_work) {
                 return entity;

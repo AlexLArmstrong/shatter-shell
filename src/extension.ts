@@ -967,7 +967,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
 
         if (this.gnome_forest) {
-            for (const [entity, monitor] of this.gnome_forest.forest.toplevel.values()) {
+            for (const [entity, monitor] of this.gnome_forest.forest.trees.values()) {
                 if (condition(monitor[1])) {
                     const value = modify(monitor[1]);
                     monitor[1] = value;
@@ -1423,13 +1423,13 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (!this.gnome_forest) return;
 
             for (const f of this.gnome_forest.forest.forks.values()) {
-                if (!f.is_toplevel) continue;
+                if (!f.is_root) continue;
 
                 const area = this.monitor_work_area(f.monitor);
 
                 f.smart_gapped = false;
                 f.set_area(area.copy());
-                this.gnome_forest.update_toplevel(f, f.monitor, this.settings.get_smart_gaps());
+                this.gnome_forest.update_tree(f, f.monitor, this.settings.get_smart_gaps());
             }
         };
 
@@ -1518,8 +1518,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             (() => {
                 if (!this.gnome_forest) return;
 
-                const toplevels = Array.from(forest.forks.values()).filter(f => f.is_toplevel);
-                const migrations = plan_migrations(toplevels, changes, this.displays[1]);
+                const trees = Array.from(forest.forks.values()).filter(f => f.is_root);
+                const migrations = plan_migrations(trees, changes, this.displays[1]);
 
                 for (const migration of migrations) {
                     if (migration.moved) migration.tree.workspace = 0;

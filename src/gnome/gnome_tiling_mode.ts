@@ -246,7 +246,7 @@ export class GnomeTilingMode {
     ) {
         let new_fork: Fork | null = null;
 
-        if (fork.is_toplevel && fork.smart_gapped) {
+        if (fork.is_root && fork.smart_gapped) {
             fork.smart_gapped = false;
             const rect = this.ext.monitor_work_area(fork.monitor);
 
@@ -329,7 +329,7 @@ export class GnomeTilingMode {
 
         let new_fork: Fork | null = null;
 
-        if (fork.is_toplevel && fork.smart_gapped) {
+        if (fork.is_root && fork.smart_gapped) {
             fork.smart_gapped = false;
             const rect = this.ext.monitor_work_area(fork.monitor);
 
@@ -422,15 +422,15 @@ export class GnomeTilingMode {
 
                 const workspace_id = this.ext.workspace_id(window);
 
-                const toplevel = this.ext.gnome_forest.forest.find_toplevel(workspace_id);
+                const tree = this.ext.gnome_forest.forest.find_tree(workspace_id);
 
-                if (!toplevel) return;
+                if (!tree) return;
 
-                const topfork = this.ext.gnome_forest.forest.forks.get(toplevel);
+                const root_fork = this.ext.gnome_forest.forest.forks.get(tree);
 
-                if (!topfork) return;
+                if (!root_fork) return;
 
-                const toparea = topfork.area;
+                const toparea = root_fork.area;
 
                 const before = window.frame();
 
