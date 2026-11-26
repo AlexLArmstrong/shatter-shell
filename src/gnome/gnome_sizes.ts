@@ -48,7 +48,7 @@ export class GnomeSizes {
         if (ext.gnome_forest) {
             const smart_gaps = ext.settings.get_smart_gaps();
             for (const [fork, monitor] of Array.from(ext.gnome_forest.forest.lone_trees())) {
-                ext.gnome_forest.update_toplevel(fork, monitor, smart_gaps);
+                ext.gnome_forest.update_tree(fork, monitor, smart_gaps);
             }
         }
 
@@ -73,7 +73,7 @@ export class GnomeSizes {
             return;
         }
 
-        for (const [entity] of ext.gnome_forest.forest.toplevel.values()) {
+        for (const [entity] of ext.gnome_forest.forest.trees_.values()) {
             const fork = ext.gnome_forest.forest.forks.get(entity);
             if (fork) ext.gnome_forest.tile(fork, fork.area);
         }
