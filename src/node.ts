@@ -15,18 +15,6 @@ export enum NodeKind {
     STACK = 3,
 }
 
-/** Fetch the string representation of this value */
-function node_kind_as_string(kind: NodeKind): string {
-    switch (kind) {
-        case NodeKind.FORK:
-            return 'NodeKind.FORK';
-        case NodeKind.WINDOW:
-            return 'NodeKind.WINDOW';
-        case NodeKind.STACK:
-            return 'NodeKind.STACK';
-    }
-}
-
 /** Identifies this node as a fork */
 export interface NodeFork {
     kind: NodeKind.FORK;
@@ -170,21 +158,6 @@ export class Node<T extends NodeADT = NodeADT> {
             idx,
             rect: null,
         });
-    }
-
-    /** Generates a string representation of the this value. */
-    display(): string {
-        let fmt = `Node{\n    kind: ${node_kind_as_string(this.inner.kind)},\n`;
-        switch (this.inner.kind) {
-            case NodeKind.FORK:
-            case NodeKind.WINDOW:
-                fmt += `    entity: (${this.inner.entity})\n  }`;
-                break;
-            case NodeKind.STACK:
-                fmt += `    entities: ${this.inner.entities}\n  }`;
-                break;
-        }
-        return fmt;
     }
 
     /** Check if the entity exists as a child of this stack */
