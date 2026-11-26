@@ -3,6 +3,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
+import type { Fork } from './fork.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
@@ -15,46 +16,64 @@ export enum NodeKind {
     STACK = 3,
 }
 
-/** Fetch the string representation of this value */
-function node_kind_as_string(kind: NodeKind): string {
-    switch (kind) {
-        case NodeKind.FORK:
-            return 'NodeKind.FORK';
-        case NodeKind.WINDOW:
-            return 'NodeKind.WINDOW';
-        case NodeKind.STACK:
-            return 'NodeKind.STACK';
-    }
-}
-
-/** Identifies this node as a fork */
 export interface NodeFork {
     kind: NodeKind.FORK;
-    entity: Entity;
+    fork: Fork;
+    parent: Fork | null;
 }
 
 /** Identifies this node as a window */
 export interface NodeWindow {
     kind: NodeKind.WINDOW;
-    entity: Entity;
+    window: MutterWindowHandle;
+    parent: Fork | null;
 }
 
 export interface NodeStack {
     kind: NodeKind.STACK;
     idx: number;
-    entities: Array<Entity>;
+    windows: Array<MutterWindowHandle>;
     rect: Mtk.Rectangle | null;
+    parent: Fork | null;
+}
+
+export function stack_add(node: NodeStack, window: MutterWindowHandle, front = false) {
+    if (front) {
+        node.windows.unshift(window);
+    } else {
+        node.windows.push(window);
+    }
+    node.parent?.hold_window(node, window);
+}
+
+export function stack_set(node: NodeStack, idx: number, window: MutterWindowHandle) {
+    const previous = node.windows[idx];
+    node.windows[idx] = window;
+    node.parent?.hold_window(node, window);
+    if (previous) node.parent?.let_go_window(node, previous);
+}
+
+function stack_take(node: NodeStack, idx: number) {
+    const [window] = node.windows.splice(idx, 1);
+    if (window) node.parent?.let_go_window(node, window);
+}
+
+export function window_set(node: NodeWindow, window: MutterWindowHandle) {
+    const previous = node.window;
+    node.window = window;
+    node.parent?.hold_window(node, window);
+    node.parent?.let_go_window(node, previous);
 }
 
 function stack_detach(node: NodeStack, stack: Stack, idx: number) {
-    node.entities.splice(idx, 1);
+    stack_take(node, idx);
     stack.remove_by_pos(idx);
 }
 
 export function stack_find(node: NodeStack, entity: Entity) {
     let idx = 0;
-    while (idx < node.entities.length) {
-        if (Ecs.entity_eq(entity, node.entities[idx]!)) {
+    while (idx < node.windows.length) {
+        if (Ecs.entity_eq(entity, node.windows[idx]!.entity)) {
             return idx;
         }
         idx += 1;
@@ -69,8 +88,8 @@ export function stack_move_left(ext: Ext, forest: Forest, node: NodeStack, entit
     if (!stack) return false;
 
     let idx = 0;
-    for (const cmp of node.entities) {
-        if (Ecs.entity_eq(cmp, entity)) {
+    for (const cmp of node.windows) {
+        if (Ecs.entity_eq(cmp.entity, entity)) {
             if (idx === 0) {
                 // Remove the window from the stack
                 stack_detach(node, stack, 0);
@@ -97,9 +116,9 @@ export function stack_move_right(ext: Ext, forest: Forest, node: NodeStack, enti
 
     let moved = false;
     let idx = 0;
-    const max = node.entities.length - 1;
-    for (const cmp of node.entities) {
-        if (Ecs.entity_eq(cmp, entity)) {
+    const max = node.windows.length - 1;
+    for (const cmp of node.windows) {
+        if (Ecs.entity_eq(cmp.entity, entity)) {
             if (idx === max) {
                 stack_detach(node, stack, idx);
                 moved = false;
@@ -132,15 +151,17 @@ export function stack_remove(forest: Forest, node: NodeStack, entity: Entity) {
     const stack = forest.stacks.get(node.idx);
     if (!stack) return null;
     const idx = stack.remove_tab(entity);
-    if (idx !== null) node.entities.splice(idx, 1);
+    if (idx !== null) stack_take(node, idx);
     return idx;
 }
 
 function stack_swap(node: NodeStack, from: number, to: number) {
-    const tmp = node.entities[from];
-    node.entities[from] = node.entities[to]!;
-    node.entities[to] = tmp!;
+    const tmp = node.windows[from];
+    node.windows[from] = node.windows[to]!;
+    node.windows[to] = tmp!;
 }
+
+export type NodeLeaf = NodeWindow | NodeStack;
 
 export type NodeADT = NodeFork | NodeWindow | NodeStack;
 
@@ -154,44 +175,34 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Create a fork variant of a `Node` */
-    static fork(entity: Entity): Node<NodeFork> {
-        return new Node({ kind: NodeKind.FORK, entity });
+    static fork(fork: Fork): Node<NodeFork> {
+        return new Node({ kind: NodeKind.FORK, fork, parent: null });
     }
 
     /** Create the window variant of a `Node` */
-    static window(entity: Entity): Node<NodeWindow> {
-        return new Node({ kind: NodeKind.WINDOW, entity });
+    static window(window: MutterWindowHandle): Node<NodeWindow> {
+        return new Node({ kind: NodeKind.WINDOW, window, parent: null });
     }
 
-    static stacked(window: Entity, idx: number): Node<NodeStack> {
+    static stacked(window: MutterWindowHandle, idx: number): Node<NodeStack> {
         return new Node({
             kind: NodeKind.STACK,
-            entities: [window],
+            windows: [window],
             idx,
             rect: null,
+            parent: null,
         });
     }
 
-    /** Generates a string representation of the this value. */
-    display(): string {
-        let fmt = `Node{\n    kind: ${node_kind_as_string(this.inner.kind)},\n`;
-        switch (this.inner.kind) {
-            case NodeKind.FORK:
-            case NodeKind.WINDOW:
-                fmt += `    entity: (${this.inner.entity})\n  }`;
-                break;
-            case NodeKind.STACK:
-                fmt += `    entities: ${this.inner.entities}\n  }`;
-                break;
-        }
-        return fmt;
+    has(entity: Entity): boolean {
+        return this.is_window(entity) || this.is_in_stack(entity);
     }
 
     /** Check if the entity exists as a child of this stack */
     is_in_stack(entity: Entity): this is Node<T> & { inner: NodeStack } {
         if (this.inner.kind === NodeKind.STACK) {
-            for (const compare of this.inner.entities) {
-                if (Ecs.entity_eq(entity, compare)) return true;
+            for (const compare of this.inner.windows) {
+                if (Ecs.entity_eq(entity, compare.entity)) return true;
             }
         }
 
@@ -200,12 +211,12 @@ export class Node<T extends NodeADT = NodeADT> {
 
     /** Asks if this fork is the fork we are looking for */
     is_fork(entity: Entity): boolean {
-        return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.entity, entity);
+        return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.fork.entity, entity);
     }
 
     /** Asks if this window is the window we are looking for */
     is_window(entity: Entity): boolean {
-        return this.inner.kind === NodeKind.WINDOW && Ecs.entity_eq(this.inner.entity, entity);
+        return this.inner.kind === NodeKind.WINDOW && Ecs.entity_eq(this.inner.window.entity, entity);
     }
 
     /** Calculates the future arrangement of windows in this node */
@@ -218,14 +229,14 @@ export class Node<T extends NodeADT = NodeADT> {
     ) {
         switch (this.inner.kind) {
             case NodeKind.FORK:
-                const fork = tiler.forks.get(this.inner.entity);
-                if (fork) {
+                const fork = this.inner.fork;
+                if (!fork.detached) {
                     fork.measure(tiler, ext, area, record);
                 }
 
                 break;
             case NodeKind.WINDOW:
-                record(this.inner.entity, parent, area.copy());
+                record(this.inner.window.entity, parent, area.copy());
                 break;
             case NodeKind.STACK:
                 const tab_height = ext.sizes.scale * TAB_HEIGHT_UNSCALED;
@@ -234,8 +245,8 @@ export class Node<T extends NodeADT = NodeADT> {
                 this.inner.rect.y += tab_height;
                 this.inner.rect.height -= tab_height;
 
-                for (const entity of this.inner.entities) {
-                    record(entity, parent, this.inner.rect);
+                for (const window of this.inner.windows) {
+                    record(window.entity, parent, this.inner.rect);
                 }
 
                 if (ext.gnome_forest) {

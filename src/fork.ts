@@ -4,7 +4,7 @@ import Mtk from 'gi://Mtk';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
-import type { Node } from './node.js';
+import type { Node, NodeLeaf } from './node.js';
 
 import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
@@ -22,10 +22,14 @@ const HEIGHT = 'height' as const;
  * These nodes may either be windows, or sub-forks.
  */
 export class Fork {
-    left: Node;
-    right: Node | null;
+    private _left: Node;
+    private _right: Node | null;
+
+    parent: Fork | null = null;
+
     area: Mtk.Rectangle;
     entity: Entity;
+    detached: boolean = false;
     on_primary_display: boolean;
     workspace: WorkspaceID;
     length_left: number;
@@ -54,14 +58,87 @@ export class Fork {
     ) {
         this.on_primary_display = global.display.get_primary_monitor() === monitor;
         this.area = area;
-        this.left = left;
-        this.right = right;
+        this._left = left;
+        this._right = right;
+        this.hold(left);
+        if (right) this.hold(right);
         this.workspace = workspace;
         this.length_left = orientation === Clutter.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
         this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orientation;
         this.monitor = monitor;
+    }
+
+    get left(): Node {
+        return this._left;
+    }
+
+    set left(branch: Node) {
+        const previous = this._left;
+        this._left = branch;
+        this.replaced(previous, branch);
+    }
+
+    get right(): Node | null {
+        return this._right;
+    }
+
+    set right(branch: Node | null) {
+        const previous = this._right;
+        this._right = branch;
+        this.replaced(previous, branch);
+    }
+
+    leave() {
+        this.let_go(this._left);
+        if (this._right) this.let_go(this._right);
+    }
+
+    hold_window(leaf: NodeLeaf, window: MutterWindowHandle) {
+        window.leaf = leaf;
+    }
+
+    let_go_window(leaf: NodeLeaf, window: MutterWindowHandle) {
+        if (window.leaf === leaf) window.leaf = null;
+    }
+
+    private replaced(previous: Node | null, branch: Node | null) {
+        if (branch) this.hold(branch);
+        if (previous && previous !== this._left && previous !== this._right) this.let_go(previous);
+    }
+
+    private hold(branch: Node) {
+        const inner = branch.inner;
+        inner.parent = this;
+        switch (inner.kind) {
+            case NodeKind.FORK:
+                inner.fork.parent = this;
+                break;
+            case NodeKind.WINDOW:
+                this.hold_window(inner, inner.window);
+                break;
+            case NodeKind.STACK:
+                for (const window of inner.windows) this.hold_window(inner, window);
+                break;
+        }
+    }
+
+    private let_go(branch: Node) {
+        const inner = branch.inner;
+        if (inner.parent !== this) return;
+        inner.parent = null;
+        switch (inner.kind) {
+            case NodeKind.FORK:
+                if (inner.fork.parent === this) inner.fork.parent = null;
+                break;
+            case NodeKind.WINDOW:
+                this.let_go_window(inner, inner.window);
+                break;
+            case NodeKind.STACK:
+                for (const window of inner.windows) this.let_go_window(inner, window);
+                break;
+        }
     }
 
     /** The calculated left area of this fork */
@@ -96,14 +173,14 @@ export class Fork {
         const locate = (branch: Node): Node | null => {
             switch (branch.inner.kind) {
                 case NodeKind.WINDOW:
-                    if (Ecs.entity_eq(branch.inner.entity, entity)) {
+                    if (Ecs.entity_eq(branch.inner.window.entity, entity)) {
                         return branch;
                     }
 
                     break;
                 case NodeKind.STACK:
-                    for (const e of branch.inner.entities) {
-                        if (Ecs.entity_eq(e, entity)) {
+                    for (const e of branch.inner.windows) {
+                        if (Ecs.entity_eq(e.entity, entity)) {
                             return branch;
                         }
                     }
@@ -139,7 +216,7 @@ export class Fork {
                 const inner = this.right.inner;
                 if (inner.kind === NodeKind.WINDOW) {
                     closure = () => {
-                        inner.entity = b.entity;
+                        node.window_set(inner, b);
                     };
                 } else if (inner.kind === NodeKind.STACK) {
                     const idx = node.stack_find(inner, a.entity);
@@ -150,7 +227,7 @@ export class Fork {
 
                     closure = () => {
                         node.stack_replace(ext, inner, b);
-                        inner.entities[idx] = b.entity;
+                        node.stack_set(inner, idx, b);
                     };
                 }
             }
@@ -162,9 +239,9 @@ export class Fork {
                 break;
             case NodeKind.WINDOW:
                 const inner = this.left.inner;
-                if (Ecs.entity_eq(inner.entity, a.entity)) {
+                if (Ecs.entity_eq(inner.window.entity, a.entity)) {
                     closure = () => {
-                        inner.entity = b.entity;
+                        node.window_set(inner, b);
                     };
                 } else {
                     check_right();
@@ -178,7 +255,7 @@ export class Fork {
                     const id = idx;
                     closure = () => {
                         node.stack_replace(ext, inner_s, b);
-                        inner_s.entities[id] = b.entity;
+                        node.stack_set(inner_s, id, b);
                     };
                 } else {
                     check_right();
@@ -304,34 +381,28 @@ export class Fork {
             for (const child of forest.iter(this.entity)) {
                 switch (child.inner.kind) {
                     case NodeKind.FORK:
-                        const cfork = forest.forks.get(child.inner.entity);
-                        if (!cfork) continue;
+                        const cfork = child.inner.fork;
+                        if (cfork.detached) continue;
                         cfork.workspace = workspace;
                         cfork.monitor = monitor;
                         cfork.on_primary_display = primary;
                         break;
                     case NodeKind.WINDOW:
-                        const window = ext.windows.get(child.inner.entity);
-                        if (window) {
+                        const window = child.inner.window;
+                        ext.size_signals_block(window);
+                        window.reassignment = false;
+                        window.known_workspace = workspace;
+                        window.meta.change_workspace_by_index(workspace, true);
+                        ext.monitors.insert(window.entity, [monitor, workspace]);
+                        blocked.push(window);
+                        break;
+                    case NodeKind.STACK:
+                        for (const window of child.inner.windows) {
                             ext.size_signals_block(window);
-                            window.reassignment = false;
                             window.known_workspace = workspace;
                             window.meta.change_workspace_by_index(workspace, true);
                             ext.monitors.insert(window.entity, [monitor, workspace]);
                             blocked.push(window);
-                        }
-                        break;
-                    case NodeKind.STACK:
-                        for (const entity of child.inner.entities) {
-                            const window = ext.windows.get(entity);
-
-                            if (window) {
-                                ext.size_signals_block(window);
-                                window.known_workspace = workspace;
-                                window.meta.change_workspace_by_index(workspace, true);
-                                ext.monitors.insert(window.entity, [monitor, workspace]);
-                                blocked.push(window);
-                            }
                         }
                 }
             }
@@ -397,24 +468,20 @@ export class Fork {
 function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
     switch (branch.inner.kind) {
         case NodeKind.WINDOW:
-            return window_minimum_size(ext, branch.inner.entity);
+            return branch.inner.window.minimum_size();
         case NodeKind.STACK:
-            return stack_minimum_size(ext, branch.inner.entities);
+            return stack_minimum_size(ext, branch.inner.windows);
         case NodeKind.FORK:
-            return fork_minimum_size(ext, tiler, branch.inner.entity);
+            return fork_minimum_size(ext, tiler, branch.inner.fork);
     }
 }
 
-function window_minimum_size(ext: Ext, entity: Entity): [number, number] {
-    return ext.windows.get(entity)?.minimum_size() ?? [0, 0];
-}
-
 /** Gets the stack's minimum size based on its windows and the tab bar. */
-function stack_minimum_size(ext: Ext, entities: Entity[]): [number, number] {
+function stack_minimum_size(ext: Ext, windows: MutterWindowHandle[]): [number, number] {
     let width = 0;
     let height = 0;
-    for (const entity of entities) {
-        const [window_width, window_height] = window_minimum_size(ext, entity);
+    for (const window of windows) {
+        const [window_width, window_height] = window.minimum_size();
         width = Math.max(width, window_width);
         height = Math.max(height, window_height);
     }
@@ -422,9 +489,8 @@ function stack_minimum_size(ext: Ext, entities: Entity[]): [number, number] {
 }
 
 /** Gets the fork's minimum size based on its left and right nodes. */
-function fork_minimum_size(ext: Ext, tiler: Forest, entity: Entity): [number, number] {
-    const fork = tiler.forks.get(entity);
-    if (!fork) return [0, 0];
+function fork_minimum_size(ext: Ext, tiler: Forest, fork: Fork): [number, number] {
+    if (fork.detached) return [0, 0];
 
     const [left_width, left_height] = minimum_size(tiler, ext, fork.left);
     if (!fork.right) return [left_width, left_height];

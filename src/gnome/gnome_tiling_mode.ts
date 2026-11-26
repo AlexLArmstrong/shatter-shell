@@ -181,18 +181,9 @@ export class GnomeTilingMode {
         const new_fork = forest.create_fork(left, right, fork.area, fork.workspace, fork.monitor);
 
         if (is_left) {
-            fork.left = Node.Node.fork(new_fork[0]);
+            fork.left = Node.Node.fork(new_fork[1]);
         } else {
-            fork.right = Node.Node.fork(new_fork[0]);
-        }
-
-        // Associate the new fork with its parent
-        this.ext.gnome_forest.forest.parents.insert(new_fork[0], fork.entity);
-
-        // Update parent assignments
-        forest.on_attach(new_fork[0], focused.entity);
-        for (const e of stack.entities) {
-            forest.on_attach(new_fork[0], e);
+            fork.right = Node.Node.fork(new_fork[1]);
         }
 
         return new_fork[1];
@@ -302,23 +293,22 @@ export class GnomeTilingMode {
             let left, right;
             if (reverse) {
                 left = branch;
-                right = Node.Node.window(focused.entity);
+                right = Node.Node.window(focused);
             } else {
-                left = Node.Node.window(focused.entity);
+                left = Node.Node.window(focused);
                 right = branch;
             }
 
             new_fork = this.unstack_from_fork(branch.inner, focused, fork, left, right, is_left);
         } else if (reverse) {
-            fork.right = Node.Node.window(focused.entity);
+            fork.right = Node.Node.window(focused);
         } else {
             fork.right = fork.left;
-            fork.left = Node.Node.window(focused.entity);
+            fork.left = Node.Node.window(focused);
         }
 
         const modifier = new_fork ?? fork;
         modifier.set_orientation(orientation);
-        this.ext.gnome_forest.forest.on_attach(modifier.entity, focused.entity);
         this.ext.gnome_forest.tile(fork, fork.area);
         this.overlay_watch(focused);
     }
@@ -333,7 +323,7 @@ export class GnomeTilingMode {
 
         const inner = branch.inner;
 
-        if (inner.entities.length === 1) {
+        if (inner.windows.length === 1) {
             this.ext.gnome_forest.toggle_stacking();
             this.overlay_watch(focused);
             return;
@@ -364,23 +354,22 @@ export class GnomeTilingMode {
                 let left, right;
                 if (reverse) {
                     left = branch;
-                    right = Node.Node.window(fentity);
+                    right = Node.Node.window(focused);
                 } else {
-                    left = Node.Node.window(fentity);
+                    left = Node.Node.window(focused);
                     right = branch;
                 }
 
                 new_fork = this.unstack_from_fork(inner, focused, fork, left, right, is_left);
             } else if (reverse) {
-                fork.right = Node.Node.window(fentity);
+                fork.right = Node.Node.window(focused);
             } else {
                 fork.right = fork.left;
-                fork.left = Node.Node.window(fentity);
+                fork.left = Node.Node.window(focused);
             }
 
             const modifier = new_fork ?? fork;
             modifier.set_orientation(orientation);
-            forest.on_attach(modifier.entity, fentity);
             this.ext.gnome_forest.tile(fork, fork.area);
             this.overlay_watch(focused);
         };
@@ -428,7 +417,7 @@ export class GnomeTilingMode {
         callback: (m: Mtk.Rectangle, a: Mtk.Rectangle, mov: Mtk.Rectangle) => boolean,
     ) {
         if (this.ext.gnome_forest && this.window) {
-            const entity = this.ext.gnome_forest.attached.get(this.window);
+            const entity = this.ext.windows.get(this.window)?.leaf?.parent?.entity ?? null;
             if (entity) {
                 const fork = this.ext.gnome_forest.forest.forks.get(entity);
                 const window = this.ext.windows.get(this.window);
@@ -562,7 +551,6 @@ export class GnomeTilingMode {
                     focused.ignore_detach = true;
                     gnome_forest.detach_window(focused.entity);
 
-                    gnome_forest.forest.on_attach(stack_fork.entity, focused.entity);
                     gnome_forest.update_stack(stack);
 
                     gnome_forest.tile(stack_fork, stack_fork.area);
