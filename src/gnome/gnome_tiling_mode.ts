@@ -186,9 +186,6 @@ export class GnomeTilingMode {
             fork.right = Node.Node.fork(new_fork[1]);
         }
 
-        // Associate the new fork with its parent
-        this.ext.gnome_forest.forest.parents.insert(new_fork[0], fork.entity);
-
         // Update parent assignments
         forest.on_attach(new_fork[0], focused.entity);
         for (const window of stack.windows) {

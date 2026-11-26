@@ -19,12 +19,14 @@ export enum NodeKind {
 export interface NodeFork {
     kind: NodeKind.FORK;
     fork: Fork;
+    parent: Fork | null;
 }
 
 /** Identifies this node as a window */
 export interface NodeWindow {
     kind: NodeKind.WINDOW;
     window: MutterWindowHandle;
+    parent: Fork | null;
 }
 
 export interface NodeStack {
@@ -32,6 +34,7 @@ export interface NodeStack {
     idx: number;
     windows: Array<MutterWindowHandle>;
     rect: Mtk.Rectangle | null;
+    parent: Fork | null;
 }
 
 function stack_detach(node: NodeStack, stack: Stack, idx: number) {
@@ -143,12 +146,12 @@ export class Node<T extends NodeADT = NodeADT> {
 
     /** Create a fork variant of a `Node` */
     static fork(fork: Fork): Node<NodeFork> {
-        return new Node({ kind: NodeKind.FORK, fork });
+        return new Node({ kind: NodeKind.FORK, fork, parent: null });
     }
 
     /** Create the window variant of a `Node` */
     static window(window: MutterWindowHandle): Node<NodeWindow> {
-        return new Node({ kind: NodeKind.WINDOW, window });
+        return new Node({ kind: NodeKind.WINDOW, window, parent: null });
     }
 
     static stacked(window: MutterWindowHandle, idx: number): Node<NodeStack> {
@@ -157,6 +160,7 @@ export class Node<T extends NodeADT = NodeADT> {
             windows: [window],
             idx,
             rect: null,
+            parent: null,
         });
     }
 

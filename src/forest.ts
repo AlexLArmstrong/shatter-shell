@@ -65,9 +65,6 @@ export class Forest extends Ecs.World {
     /** The storage for holding all fork associations. */
     forks: Ecs.Storage<Fork.Fork> = this.register_storage();
 
-    /** Child-parent associations are stored here. */
-    parents: Ecs.Storage<Entity> = this.register_storage();
-
     /** Needed when we're storing the entities in a map, because JS limitations. */
     string_reps: Ecs.Storage<string> = this.register_storage();
 
@@ -132,7 +129,6 @@ export class Forest extends Ecs.World {
                     fork.monitor,
                 )[0];
                 fork.right = Node.Node.fork(this.forks.get(new_fork)!);
-                this.parents.insert(new_fork, fork.entity);
                 this.on_attach(new_fork, window.entity);
             } else {
                 this.on_attach(fork.entity, window.entity);
@@ -150,7 +146,6 @@ export class Forest extends Ecs.World {
                     fork.monitor,
                 )[0];
                 fork.left = Node.Node.fork(this.forks.get(new_fork)!);
-                this.parents.insert(new_fork, fork.entity);
                 this.on_attach(new_fork, window.entity);
             } else {
                 this.on_attach(fork.entity, window.entity);
@@ -256,7 +251,6 @@ export class Forest extends Ecs.World {
             const [fork_entity, new_fork] = this.create_fork(fork.left, right_node, area, fork.workspace, fork.monitor);
 
             fork.left = Node.Node.fork(new_fork);
-            this.parents.insert(fork_entity, entity);
 
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
@@ -280,7 +274,6 @@ export class Forest extends Ecs.World {
             );
 
             fork.right = Node.Node.fork(new_fork);
-            this.parents.insert(fork_entity, entity);
 
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
@@ -389,7 +382,10 @@ export class Forest extends Ecs.World {
     /** Deletes a fork entity from the world, performing any cleanup necessary */
     override delete_entity(entity: Entity) {
         const fork = this.forks.remove(entity);
-        if (fork) fork.detached = true;
+        if (fork) {
+            fork.detached = true;
+            fork.leave();
+        }
         if (fork && fork.is_toplevel) {
             const id = this.string_reps.get(entity);
             if (id != null) this.toplevel.delete(id);
@@ -408,7 +404,7 @@ export class Forest extends Ecs.World {
             // Stack detachments, however, need not rebalance the fork
             stack_detach = false;
 
-        const parent = this.parents.get(fork_entity);
+        const parent = fork.parent?.entity ?? null;
         if (fork.left.is_window(window)) {
             if (parent && fork.right) {
                 const pfork = this.reassign_child_to_parent(fork_entity, parent, fork.right);
@@ -654,44 +650,34 @@ export class Forest extends Ecs.World {
     }
 
     reassign_to_parent(child: Fork.Fork, reassign: Node.Node) {
-        const p = this.parents.get(child.entity);
-        if (p) {
-            const p_fork = this.forks.get(p);
-            if (p_fork) {
-                if (p_fork.left.is_fork(child.entity)) {
-                    p_fork.left = reassign;
-                } else {
-                    p_fork.right = reassign;
-                }
+        const p_fork = child.parent;
+        if (p_fork) {
+            const p = p_fork.entity;
+            if (p_fork.left.is_fork(child.entity)) {
+                p_fork.left = reassign;
+            } else {
+                p_fork.right = reassign;
+            }
 
-                const inner = reassign.inner;
+            const inner = reassign.inner;
 
-                switch (inner.kind) {
-                    case Node.NodeKind.FORK:
-                        this.parents.insert(inner.fork.entity, p);
-                        break;
-                    case Node.NodeKind.WINDOW:
-                        this.on_attach(p, inner.window.entity);
-                        break;
-                    case Node.NodeKind.STACK:
-                        for (const window of inner.windows) this.on_attach(p, window.entity);
-                }
+            switch (inner.kind) {
+                case Node.NodeKind.FORK:
+                    break;
+                case Node.NodeKind.WINDOW:
+                    this.on_attach(p, inner.window.entity);
+                    break;
+                case Node.NodeKind.STACK:
+                    for (const window of inner.windows) this.on_attach(p, window.entity);
             }
 
             this.delete_entity(child.entity);
         }
     }
 
-    /**
-     * Reassigns a sibling based on whether it is a fork or a window.
-     *
-     * - If the sibling is a fork, reassign the parent.
-     * - If it is a window, simply call on_attach
-     */
     private reassign_sibling(sibling: Node.Node, parent: Entity) {
         switch (sibling.inner.kind) {
             case Node.NodeKind.FORK:
-                this.parents.insert(sibling.inner.fork.entity, parent);
                 break;
             case Node.NodeKind.WINDOW:
                 this.on_attach(parent, sibling.inner.window.entity);
@@ -757,8 +743,8 @@ export class Forest extends Ecs.World {
 
     /** Resizes a fork in the direction that a movement requests */
     private resize_fork_(ext: Ext, child_e: Entity, crect: Mtk.Rectangle, mov: movement.Movement, shrunk: boolean) {
-        let parent = this.parents.get(child_e);
         let child = this.forks.get(child_e)!;
+        let parent = child.parent;
 
         if (!parent) {
             child.measure(this, ext, child.area, this.on_record());
@@ -772,7 +758,7 @@ export class Forest extends Ecs.World {
             length: number;
 
         while (parent !== null) {
-            child = this.forks.get(parent)!;
+            child = parent;
             is_left = child.left.is_fork(child_e);
 
             if (child.area.contains_rect(crect)) {
@@ -811,8 +797,8 @@ export class Forest extends Ecs.World {
                 }
             }
 
-            child_e = parent;
-            parent = this.parents.get(child_e);
+            child_e = child.entity;
+            parent = child.parent;
         }
 
         if (child.is_horizontal()) {

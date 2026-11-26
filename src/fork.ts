@@ -22,8 +22,11 @@ const HEIGHT = 'height' as const;
  * These nodes may either be windows, or sub-forks.
  */
 export class Fork {
-    left: Node;
-    right: Node | null;
+    private _left: Node;
+    private _right: Node | null;
+
+    parent: Fork | null = null;
+
     area: Mtk.Rectangle;
     entity: Entity;
     detached: boolean = false;
@@ -55,14 +58,63 @@ export class Fork {
     ) {
         this.on_primary_display = global.display.get_primary_monitor() === monitor;
         this.area = area;
-        this.left = left;
-        this.right = right;
+        this._left = left;
+        this._right = right;
+        this.hold(left);
+        if (right) this.hold(right);
         this.workspace = workspace;
         this.length_left = orientation === Clutter.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
         this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orientation;
         this.monitor = monitor;
+    }
+
+    get left(): Node {
+        return this._left;
+    }
+
+    set left(branch: Node) {
+        const previous = this._left;
+        this._left = branch;
+        this.replaced(previous, branch);
+    }
+
+    get right(): Node | null {
+        return this._right;
+    }
+
+    set right(branch: Node | null) {
+        const previous = this._right;
+        this._right = branch;
+        this.replaced(previous, branch);
+    }
+
+    leave() {
+        this.let_go(this._left);
+        if (this._right) this.let_go(this._right);
+    }
+
+    private replaced(previous: Node | null, branch: Node | null) {
+        if (branch) this.hold(branch);
+        if (previous && previous !== this._left && previous !== this._right) this.let_go(previous);
+    }
+
+    private hold(branch: Node) {
+        const inner = branch.inner;
+        inner.parent = this;
+        if (inner.kind === NodeKind.FORK) {
+            inner.fork.parent = this;
+        }
+    }
+
+    private let_go(branch: Node) {
+        const inner = branch.inner;
+        if (inner.parent !== this) return;
+        inner.parent = null;
+        if (inner.kind === NodeKind.FORK) {
+            if (inner.fork.parent === this) inner.fork.parent = null;
+        }
     }
 
     /** The calculated left area of this fork */
