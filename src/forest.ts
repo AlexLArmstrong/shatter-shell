@@ -53,8 +53,7 @@ interface Request {
  * arrangement.
  */
 export class Forest extends Ecs.World implements Fork.TreeLinks {
-    /** The root fork of every tree */
-    private readonly trees_ = new Set<Fork.Fork>();
+    private readonly trees_ = new Set<Fork.Tree>();
 
     /** Stores window positions that have been requested. */
     requested: Map<Entity, Request> = new Map();
@@ -338,7 +337,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
 
     /** Moves every tree `change` pixels in from each edge, except smart-gapped ones */
     move_in(change: number) {
-        for (const fork of this.trees()) {
+        for (const { root: fork } of this.trees()) {
             if (fork.smart_gapped) continue;
 
             fork.area.x += change;
@@ -350,17 +349,17 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
 
     /** The trees that hold a single window, with their monitors */
     *lone_trees(): Generator<[Fork.Fork, MonitorID], void> {
-        for (const fork of this.trees()) {
+        for (const { root: fork } of this.trees()) {
             if (fork.right === null) yield [fork, fork.monitor];
         }
     }
 
-    add_tree(window: Entity, area: Mtk.Rectangle, id: MonitorWorkspaceID): [Entity, Fork.Fork] {
-        const [entity, fork] = this.create_fork(Node.Node.window(window), null, area, new Fork.Tree(id[0], id[1]));
-        fork.is_root = true;
-        this.trees_.add(fork);
+    add_tree(window: Entity, area: Mtk.Rectangle, id: MonitorWorkspaceID): Fork.Tree {
+        const tree = new Fork.Tree(id[0], id[1]);
+        [, tree.root] = this.create_fork(Node.Node.window(window), null, area, tree);
+        this.trees_.add(tree);
 
-        return [entity, fork];
+        return tree;
     }
 
     /** Deletes a fork entity from the world, performing any cleanup necessary */
@@ -369,7 +368,7 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
         if (fork) {
             fork.detached = true;
             fork.leave();
-            this.trees_.delete(fork);
+            if (fork.is_root) this.trees_.delete(fork.tree);
         }
 
         super.delete_entity(entity);
@@ -448,24 +447,23 @@ export class Forest extends Ecs.World implements Fork.TreeLinks {
     fmt(ext: Ext) {
         let fmt = '';
 
-        for (const fork of this.trees()) {
+        for (const { root: fork } of this.trees()) {
             fmt += ' ' + this.display_fork(ext, fork.entity, fork, 1) + '\n';
         }
 
         return fmt;
     }
 
-    /** The root fork of every tree, which is the one fork that may have a single child */
-    trees(): Iterable<Fork.Fork> {
+    trees(): Iterable<Fork.Tree> {
         return this.trees_;
     }
 
     /** Finds the tree on a monitor and workspace */
-    find_tree([src_mon, src_work]: MonitorWorkspaceID): Entity | null {
-        for (const fork of this.trees()) {
-            const { monitor, workspace } = fork;
+    find_tree([src_mon, src_work]: MonitorWorkspaceID): Fork.Tree | null {
+        for (const tree of this.trees()) {
+            const { monitor, workspace } = tree;
             if (monitor == src_mon && workspace == src_work) {
-                return fork.entity;
+                return tree;
             }
         }
 

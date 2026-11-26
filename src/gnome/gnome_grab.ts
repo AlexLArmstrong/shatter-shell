@@ -181,7 +181,7 @@ export class GnomeGrab {
 
         const tree = forest.find_tree(ext.workspace_id());
         if (tree) {
-            geom.clamp(crect, forest.forks.get(tree)!.area);
+            geom.clamp(crect, tree.root.area);
         }
 
         const neighbour_rect = (side: EdgeSide) => ext.focus_selector.toward(ext, side, win)?.frame() ?? null;

@@ -23,8 +23,11 @@ export interface TreeLinks {
     readonly leaves: Ecs.Storage<NodeLeaf>;
 }
 
-/** Where a tree is, its monitor and its workspace, which all of its forks share */
+/** A tree of forks: its root fork, and where it is, which all of its forks share */
 export class Tree {
+    /** The fork at the root of the tree, for as long as the tree lives */
+    root!: Fork;
+
     monitor: MonitorID;
     workspace: WorkspaceID;
     on_primary_display: boolean;
@@ -56,7 +59,7 @@ export class Fork {
      * links to it is out of date, so walks of the tree skip it, as they did when they looked it up.
      */
     detached: boolean = false;
-    /** The tree's monitor and workspace, which all of its forks share */
+    /** The tree that the fork is in, which all of its forks share */
     readonly tree: Tree;
     length_left: number;
     prev_length_left: number;
@@ -65,7 +68,6 @@ export class Fork {
     orientation;
 
     orientation_changed: boolean = false;
-    is_root: boolean = false;
 
     smart_gapped: boolean = false;
 
@@ -91,6 +93,10 @@ export class Fork {
         this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orientation;
+    }
+
+    get is_root(): boolean {
+        return this.tree.root === this;
     }
 
     /** The tree's workspace */

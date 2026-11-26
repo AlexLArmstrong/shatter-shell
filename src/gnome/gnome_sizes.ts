@@ -73,7 +73,7 @@ export class GnomeSizes {
             return;
         }
 
-        for (const fork of ext.gnome_forest.forest.trees()) {
+        for (const { root: fork } of ext.gnome_forest.forest.trees()) {
             ext.gnome_forest.tile(fork, fork.area);
         }
     }
