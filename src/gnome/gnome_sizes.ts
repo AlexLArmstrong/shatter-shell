@@ -91,8 +91,8 @@ export class GnomeSizes {
 
     private snap_again() {
         const { ext } = this;
-        for (const entity of ext.snapped) {
-            const window = ext.windows.get(entity);
+        for (const window_id of ext.snapped) {
+            const window = ext.windows.get(window_id);
             if (window) ext.gnome_tiling_mode.snap(window);
         }
     }

@@ -44,7 +44,7 @@ enum RESTACK_SPEED {
 }
 
 export class MutterWindowHandle implements WindowHandle {
-    entity: WindowId;
+    id: WindowId;
 
     /** The name of the window's app */
     private readonly name_: string;
@@ -90,15 +90,15 @@ export class MutterWindowHandle implements WindowHandle {
 
     /** The stack that the window is in, if any, as the tree has it */
     get stack(): number | null {
-        const leaf = this.ext.gnome_forest?.forest.leaf_of(this.entity);
+        const leaf = this.ext.gnome_forest?.forest.leaf_of(this.id);
         return leaf?.kind === NodeKind.STACK ? leaf.idx : null;
     }
 
-    constructor(entity: WindowId, window: Meta.Window, window_app: Shell.App, ext: Ext) {
+    constructor(window_id: WindowId, window: Meta.Window, window_app: Shell.App, ext: Ext) {
         this.window_app = window_app;
         this.name_ = window_app.get_name().replace(/&/g, '&amp;');
 
-        this.entity = entity;
+        this.id = window_id;
         this.meta = window;
         this.ext = ext;
         this.visibility = new GnomeVisibility(window);
@@ -610,7 +610,7 @@ export class MutterWindowHandle implements WindowHandle {
                 // Retain tiled position for when the window is unmaximized.
             } else {
                 // Untile window
-                if (update_auto_tiler) this.ext.gnome_forest?.detach_window(this.entity);
+                if (update_auto_tiler) this.ext.gnome_forest?.detach_window(this.id);
             }
         }
     }

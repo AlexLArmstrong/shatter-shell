@@ -112,7 +112,7 @@ export class GnomeGrab {
             minimized: win.meta.minimized,
             maximized: win.is_maximized(),
             auto_tiling: at !== null,
-            in_tree: at?.attached.contains(win.entity) ?? false,
+            in_tree: at?.attached.contains(win.id) ?? false,
             other_monitor: monitor !== win.monitor_id(),
             pointer_in_work_area: win.meta.get_work_area_for_monitor(monitor).contains_rect(pointer),
             pointer: [pointer.x, pointer.y],
@@ -123,13 +123,13 @@ export class GnomeGrab {
             case 'none':
                 break;
             case 'not_grabbed':
-                Log.error(`grabbed entity is not the same as the one that was dropped`);
+                Log.error(`grabbed window is not the same as the one that was dropped`);
                 break;
             case 'minimized':
                 ext.on_minimize(win);
                 break;
             case 'reflow':
-                at?.reflow(win.entity);
+                at?.reflow(win.id);
                 break;
             case 'drop':
                 at?.on_drop(win, outcome.other_monitor);
@@ -148,7 +148,7 @@ export class GnomeGrab {
         const at = ext.gnome_forest;
         if (!at) return;
 
-        const fork = at.attached.get(win.entity);
+        const fork = at.attached.get(win.id);
         if (!fork) {
             Log.error(`no fork found`);
             return;
@@ -170,7 +170,7 @@ export class GnomeGrab {
 
         const neighbour_rect = (side: EdgeSide) => ext.focus_selector.toward(ext, side, win)?.frame() ?? null;
         if (movement_is_valid(movement, win.frame(), neighbour_rect)) {
-            forest.resize(ext, fork, win.entity, movement, crect);
+            forest.resize(ext, fork, win.id, movement, crect);
             forest.arrange(ext);
         } else {
             forest.tile(ext, fork, fork.area);
@@ -215,20 +215,20 @@ export class GnomeGrab {
         // The tiled window under the pointer, or else the window's sibling in its fork
         let attach_to: MutterWindowHandle | null = null;
         for (const found of ext.windows_at_pointer(cursor, monitor, workspace)) {
-            if (found !== win && at.attached.contains(found.entity)) {
+            if (found !== win && at.attached.contains(found.id)) {
                 attach_to = found;
                 break;
             }
         }
 
-        const fork = at.get_parent_fork(win.entity);
+        const fork = at.get_parent_fork(win.id);
         if (!fork) return GLib.SOURCE_CONTINUE;
 
         if (attach_to === null) {
             const left = fork.left.lone_window();
             const right = fork.right?.lone_window() ?? null;
             if (left !== null && right !== null) {
-                attach_to = ext.windows.get(left === win.entity ? right : left) ?? null;
+                attach_to = ext.windows.get(left === win.id ? right : left) ?? null;
             }
         }
 
@@ -243,7 +243,7 @@ export class GnomeGrab {
 
         const target: Target | null = attach_to && {
             frame: attach_to.meta.get_frame_rect(),
-            sibling: at.windows_are_siblings(win.entity, attach_to.entity) !== null,
+            sibling: at.windows_are_siblings(win.id, attach_to.id) !== null,
             fork_area: fork.area,
             in_stack: win.stack !== null,
         };

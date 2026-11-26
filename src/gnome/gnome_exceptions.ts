@@ -118,14 +118,14 @@ export class GnomeExceptions {
         const gnome_forest = ext.gnome_forest;
         if (!gnome_forest) return;
 
-        for (const [entity, window] of ext.windows) {
-            const attachment = gnome_forest.attached.get(entity);
+        for (const [window_id, window] of ext.windows) {
+            const attachment = gnome_forest.attached.get(window_id);
             if (window.is_tilable()) {
                 if (!attachment) {
                     gnome_forest.auto_tile(window, ext.init);
                 }
             } else if (attachment) {
-                gnome_forest.detach_window(entity);
+                gnome_forest.detach_window(window_id);
             }
         }
     }

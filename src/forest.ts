@@ -113,8 +113,8 @@ export class Forest implements Fork.TreeLinks {
 
     /** Place all windows into their calculated positions. */
     arrange(ext: Ext) {
-        for (const [entity, r] of this.requested) {
-            const window = ext.windows.get(entity);
+        for (const [window_id, r] of this.requested) {
+            const window = ext.windows.get(window_id);
             if (!window) continue;
 
             let on_complete = () => {
@@ -122,7 +122,7 @@ export class Forest implements Fork.TreeLinks {
             };
 
             if (ext.gnome_tiling_mode.window !== null) {
-                if (ext.gnome_tiling_mode.window === entity) {
+                if (ext.gnome_tiling_mode.window === window_id) {
                     on_complete = () => {
                         ext.set_overlay(window.frame());
 
@@ -169,18 +169,18 @@ export class Forest implements Fork.TreeLinks {
         ext: Ext,
         stack: Node.NodeStack,
         fork: Fork.Fork,
-        new_entity: WindowId,
+        new_id: WindowId,
         stack_from_left: boolean,
     ): Fork.Fork | null {
         const container = this.view_of(stack);
         if (container) {
-            const window = ext.windows.get(new_entity);
+            const window = ext.windows.get(new_id);
             if (window) {
-                this.on_attach(new_entity);
-                Node.stack_insert(ext, stack, new_entity, stack_from_left);
+                this.on_attach(new_id);
+                Node.stack_insert(ext, stack, new_id, stack_from_left);
 
                 if (window.meta.has_focus()) {
-                    container.activate(new_entity);
+                    container.activate(new_id);
                 }
 
                 return fork;
@@ -197,8 +197,8 @@ export class Forest implements Fork.TreeLinks {
     /** Attaches a `new` window to the fork which `onto` is attached to. */
     attach_window(
         ext: Ext,
-        onto_entity: WindowId,
-        new_entity: WindowId,
+        onto_id: WindowId,
+        new_id: WindowId,
         place_by: MoveBy,
         stack_from_left: boolean,
     ): Fork.Fork | null {
@@ -252,7 +252,7 @@ export class Forest implements Fork.TreeLinks {
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
 
-            this.on_attach(new_entity);
+            this.on_attach(new_id);
             return fork;
         };
 
@@ -266,16 +266,16 @@ export class Forest implements Fork.TreeLinks {
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
 
-            this.on_attach(new_entity);
+            this.on_attach(new_id);
             return fork;
         };
 
-        const right_node = Node.Node.window(new_entity);
+        const right_node = Node.Node.window(new_id);
 
-        const fork = this.fork_of(onto_entity);
+        const fork = this.fork_of(onto_id);
         if (!fork) return null;
 
-        if (fork.left.is_window(onto_entity)) {
+        if (fork.left.is_window(onto_id)) {
             if (fork.right) {
                 return fork_and_place_on_left(fork);
             } else {
@@ -287,18 +287,18 @@ export class Forest implements Fork.TreeLinks {
                     place_by_keyboard(fork, place_by.src, left, right);
                 }
 
-                this.on_attach(new_entity);
+                this.on_attach(new_id);
                 return fork;
             }
-        } else if (fork.left.is_in_stack(onto_entity)) {
+        } else if (fork.left.is_in_stack(onto_id)) {
             const stack = fork.left.inner;
-            return this.attach_stack(ext, stack, fork, new_entity, stack_from_left);
+            return this.attach_stack(ext, stack, fork, new_id, stack_from_left);
         } else if (fork.right) {
-            if (fork.right.is_window(onto_entity)) {
+            if (fork.right.is_window(onto_id)) {
                 return fork_and_place_on_right(fork, fork.right);
-            } else if (fork.right.is_in_stack(onto_entity)) {
+            } else if (fork.right.is_in_stack(onto_id)) {
                 const stack = fork.right.inner;
-                return this.attach_stack(ext, stack, fork, new_entity, stack_from_left);
+                return this.attach_stack(ext, stack, fork, new_id, stack_from_left);
             }
         }
 
@@ -360,7 +360,7 @@ export class Forest implements Fork.TreeLinks {
         if (fork.is_root) this.trees_.delete(fork.tree);
     }
 
-    /** Detaches an entity from the a fork, re-arranging the fork's tree as necessary */
+    /** Detaches a window from its fork, re-arranging the fork's tree as necessary */
     detach(ext: Ext, fork: Fork.Fork, window: WindowId): Fork.Fork | null {
         if (fork.detached) return null;
 
@@ -373,7 +373,7 @@ export class Forest implements Fork.TreeLinks {
         const on_left = fork.left.has(window);
         const branch = on_left ? fork.left : fork.right?.has(window) ? fork.right : null;
 
-        if (branch?.is_leaf() && branch.inner.entities.length > 1) {
+        if (branch?.is_leaf() && branch.inner.windows.length > 1) {
             // The window only leaves its stack, which keeps its place in the tree
             reflow_fork = fork;
             stack_detach = true;
@@ -538,8 +538,8 @@ export class Forest implements Fork.TreeLinks {
         let largest_window = null;
         let largest_size = 0;
 
-        const window_compare = (entity: WindowId) => {
-            const window = ext.windows.get(entity);
+        const window_compare = (window_id: WindowId) => {
+            const window = ext.windows.get(window_id);
             if (window && window.is_tilable()) {
                 const rect = window.frame();
                 const size = rect.width * rect.height;
@@ -551,15 +551,15 @@ export class Forest implements Fork.TreeLinks {
         };
 
         for (const node of this.iter(fork)) {
-            if (node.is_leaf()) window_compare(node.inner.entities[0]!);
+            if (node.is_leaf()) window_compare(node.inner.windows[0]!);
         }
 
         return largest_window;
     }
 
     /** Resize a window from a given fork based on a supplied movement. */
-    resize(ext: Ext, fork_c: Fork.Fork, win_e: WindowId, movement: movement.Movement, crect: Mtk.Rectangle) {
-        const is_left = fork_c.left.has(win_e);
+    resize(ext: Ext, fork_c: Fork.Fork, window_id: WindowId, movement: movement.Movement, crect: Mtk.Rectangle) {
+        const is_left = fork_c.left.has(window_id);
         if ((movement & Movement.SHRINK) != 0) {
             this.shrink_sibling(ext, fork_c, is_left, movement, crect);
         } else {
@@ -568,13 +568,13 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Higher order function which forwards record events to our record method. */
-    on_record(): (entity: WindowId, parent: Fork.Fork, rect: Mtk.Rectangle) => void {
+    on_record(): (window_id: WindowId, parent: Fork.Fork, rect: Mtk.Rectangle) => void {
         return (e, p, a) => this.record(e, p, a);
     }
 
     /** Records window movements which have been queued. */
-    private record(entity: WindowId, parent: Fork.Fork, rect: Mtk.Rectangle) {
-        this.requested.set(entity, {
+    private record(window_id: WindowId, parent: Fork.Fork, rect: Mtk.Rectangle) {
+        this.requested.set(window_id, {
             parent: parent,
             rect: rect,
         });
@@ -638,24 +638,30 @@ export class Forest implements Fork.TreeLinks {
     }
 
     /** Resizes a fork in the direction that a movement requests */
-    private resize_fork_(ext: Ext, child_e: Fork.Fork, crect: Mtk.Rectangle, mov: movement.Movement, shrunk: boolean) {
-        let parent = this.parent_of(child_e);
-        let child = child_e;
+    private resize_fork_(
+        ext: Ext,
+        child_fork: Fork.Fork,
+        crect: Mtk.Rectangle,
+        mov: movement.Movement,
+        shrunk: boolean,
+    ) {
+        let parent = this.parent_of(child_fork);
+        let child = child_fork;
 
         if (!parent) {
             child.measure(this, ext, child.area, this.on_record());
             return;
         }
 
-        if (child_e.detached) return;
-        const src_node = child_e;
+        if (child_fork.detached) return;
+        const src_node = child_fork;
 
-        let is_left: boolean = child.left.is_fork(child_e),
+        let is_left: boolean = child.left.is_fork(child_fork),
             length: number;
 
         while (parent !== null) {
             child = parent;
-            is_left = child.left.is_fork(child_e);
+            is_left = child.left.is_fork(child_fork);
 
             if (child.area.contains_rect(crect)) {
                 if ((mov & UP) !== 0) {
@@ -693,8 +699,8 @@ export class Forest implements Fork.TreeLinks {
                 }
             }
 
-            child_e = parent;
-            parent = this.parent_of(child_e);
+            child_fork = parent;
+            parent = this.parent_of(child_fork);
         }
 
         if (child.is_horizontal()) {
@@ -764,9 +770,9 @@ export class Forest implements Fork.TreeLinks {
 
                 let fmt = 'Stack(';
 
-                for (const entity of branch.inner.entities) {
-                    const window = ext.windows.get(entity);
-                    fmt += `Window(${entity}) (${window ? geom.fmt(window.frame()) : 'unknown area'}), `;
+                for (const window_id of branch.inner.windows) {
+                    const window = ext.windows.get(window_id);
+                    fmt += `Window(${window_id}) (${window ? geom.fmt(window.frame()) : 'unknown area'}), `;
                 }
 
                 return fmt + ')';
@@ -794,14 +800,14 @@ export class Forest implements Fork.TreeLinks {
 
 function move_window(ext: Ext, window: MutterWindowHandle, rect: Mtk.Rectangle, on_complete: () => void) {
     if (!(window.meta instanceof Meta.Window)) {
-        Log.error(`attempting to a window entity in a tree which lacks a Meta.Window`);
+        Log.error(`attempting to move a window in a tree which lacks a Meta.Window`);
         return;
     }
 
     const actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
 
     if (!actor) {
-        Log.warn(`Window(${window.entity}) does not have an actor, and therefore cannot be moved`);
+        Log.warn(`Window(${window.id}) does not have an actor, and therefore cannot be moved`);
         return;
     }
 

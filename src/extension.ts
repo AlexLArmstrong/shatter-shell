@@ -192,13 +192,13 @@ export class Ext {
                 /** Validate that the window's actor still exists. */
                 if (!window.actor_exists()) return;
 
-                const movement = this.movements.get(window.entity);
-                this.movements.delete(window.entity);
+                const movement = this.movements.get(window.id);
+                this.movements.delete(window.id);
                 if (!movement) return;
 
                 const actor = window.meta.get_compositor_private<Meta.WindowActor | null>();
                 if (!actor) {
-                    this.gnome_forest?.detach_window(window.entity);
+                    this.gnome_forest?.detach_window(window.id);
                     return;
                 }
 
@@ -239,7 +239,7 @@ export class Ext {
 
                     case WindowEventType.Size:
                         if (this.gnome_forest && !win.is_maximized() && !win.meta.is_fullscreen()) {
-                            this.gnome_forest.reflow(win.entity);
+                            this.gnome_forest.reflow(win.id);
                         }
                         break;
 
@@ -249,10 +249,10 @@ export class Ext {
 
                     case WindowEventType.Fullscreen:
                         if (this.gnome_forest) {
-                            const attachment = this.gnome_forest.attached.get(win.entity);
+                            const attachment = this.gnome_forest.attached.get(win.id);
                             if (attachment) {
                                 if (!win.meta.is_fullscreen()) {
-                                    this.gnome_forest.reflow(win.entity);
+                                    this.gnome_forest.reflow(win.id);
                                     if (win.stack !== null) {
                                         this.gnome_forest.forest.stacks.get(win.stack)?.set_visible(true);
                                     }
@@ -391,8 +391,8 @@ export class Ext {
 
         // The workspaces of the tiled windows on the monitor that stay where they are
         const occupied: WorkspaceID[] = [];
-        for (const [entity] of this.gnome_forest.attached.iter()) {
-            const win = this.windows.get(entity);
+        for (const [window_id] of this.gnome_forest.attached.iter()) {
+            const win = this.windows.get(window_id);
 
             if (win && !win.reassignment && win.monitor_id() === monitor) occupied.push(win.workspace_id());
         }
@@ -412,14 +412,14 @@ export class Ext {
 
     focus_left() {
         this.stack_select(
-            (id, stack) => (id === 0 ? null : stack.tabs[id - 1]?.entity),
+            (id, stack) => (id === 0 ? null : stack.tabs[id - 1]?.id),
             () => this.focus_selector.left(this, null)?.request_activate(),
         );
     }
 
     focus_right() {
         this.stack_select(
-            (id, stack) => (stack.tabs.length > id + 1 ? stack.tabs[id + 1]?.entity : null),
+            (id, stack) => (stack.tabs.length > id + 1 ? stack.tabs[id + 1]?.id : null),
             () => this.focus_selector.right(this, null)?.request_activate(),
         );
     }
@@ -469,14 +469,14 @@ export class Ext {
         const window = this.get_focused_window();
         if (!window) return false;
 
-        const node = this.gnome_forest.find_stack(window.entity);
+        const node = this.gnome_forest.find_stack(window.id);
         return node ? apply(node[1].inner) : false;
     }
 
-    /** Fetches the window component from the entity associated with the metacity window metadata. */
+    /** The managed window of a Meta.Window, if it's managed */
     get_window(meta: Meta.Window): Window.MutterWindowHandle | null {
-        const entity = this.window_entity(meta);
-        return entity === null ? null : (this.windows.get(entity) ?? null);
+        const window_id = this.window_id(meta);
+        return window_id === null ? null : (this.windows.get(window_id) ?? null);
     }
 
     injections_add() {
@@ -511,7 +511,7 @@ export class Ext {
             const activate_window = (window: Window.MutterWindowHandle) => {
                 this.on_focused(window);
                 window.request_activate(true);
-                this.focus_history.restart_from(window.entity);
+                this.focus_history.restart_from(window.id);
             };
 
             const focused = this.get_focused_window();
@@ -567,9 +567,9 @@ export class Ext {
         if (this.gnome_forest) {
             const fork = this.gnome_forest.attached.get(win);
             if (fork?.right && fork.right.is_window(win)) {
-                const entity = fork.right.inner.entities[0]!;
+                const window_id = fork.right.inner.windows[0]!;
 
-                this.windows.get(entity)?.request_activate();
+                this.windows.get(window_id)?.request_activate();
             }
         }
 
@@ -597,7 +597,7 @@ export class Ext {
                 && stack_node?.kind === node.NodeKind.STACK
             ) {
                 // The stack dissolved, leaving just this window
-                const remaining = stack_node.entities[0];
+                const remaining = stack_node.windows[0];
                 if (remaining !== undefined && remaining !== win && remaining !== prev) {
                     this.focus_history.restart_from(remaining);
                     this.windows.get(remaining)?.request_activate();
@@ -618,7 +618,7 @@ export class Ext {
     /** Triggered when a window has been focused */
     on_focused(win: Window.MutterWindowHandle) {
         // Track history of focused windows, but do not permit duplicates.
-        this.focus_history.focused(win.entity, this.active_workspace());
+        this.focus_history.focused(win.id, this.active_workspace());
 
         this.size_signals_unblock(win);
 
@@ -628,7 +628,7 @@ export class Ext {
 
         // Update the active tab in the stack.
         if (null !== this.gnome_forest && null !== win.stack) {
-            ext?.gnome_forest?.forest.stacks.get(win.stack)?.activate(win.entity);
+            ext?.gnome_forest?.forest.stacks.get(win.stack)?.activate(win.id);
         }
 
         this.unmaximize_workspace(win);
@@ -661,7 +661,7 @@ export class Ext {
 
         if (this.conf.log_on_focus) {
             let msg =
-                `focused Window(${win.entity}) {\n`
+                `focused Window(${win.id}) {\n`
                 + `  class: "${win.meta.get_wm_class()}",\n`
                 + `  monitor: ${win.monitor_id()},\n`
                 + `  name: ${win.name()},\n`
@@ -670,7 +670,7 @@ export class Ext {
                 + `  stack: ${win.stack},\n`;
 
             if (this.gnome_forest) {
-                msg += `  fork: (${this.gnome_forest.attached.get(win.entity)?.id}),\n`;
+                msg += `  fork: (${this.gnome_forest.attached.get(win.id)?.id}),\n`;
             }
 
             Log.debug(msg + '}');
@@ -735,7 +735,7 @@ export class Ext {
             for (const compare of this.windows.values()) {
                 const is_same_space = compare.monitor_id() === mon && compare.workspace_id() === work;
 
-                if (is_same_space && !compare.floating && compare.is_maximized() && win.entity !== compare.entity) {
+                if (is_same_space && !compare.floating && compare.is_maximized() && win.id !== compare.id) {
                     compare.meta.unmaximize();
                 }
             }
@@ -751,13 +751,13 @@ export class Ext {
 
             this.on_monitor_changed(win, () => {
                 win.ignore_detach = true;
-                this.gnome_forest?.detach_window(win.entity);
+                this.gnome_forest?.detach_window(win.id);
             });
         } else {
             // Retile on unmaximize after waiting for other events to complete, such as animations
             this.register_fn(() => {
                 if (this.gnome_forest) {
-                    const fork = this.gnome_forest.attached.get(win.entity);
+                    const fork = this.gnome_forest.attached.get(win.id);
                     if (fork) this.gnome_forest.tile(fork, fork.area);
                 }
             });
@@ -776,18 +776,18 @@ export class Ext {
 
         if (this.gnome_forest) {
             if (win.meta.minimized) {
-                const fork = this.gnome_forest.attached.get(win.entity);
+                const fork = this.gnome_forest.attached.get(win.id);
                 if (!fork) return;
 
                 let attachment: boolean | number;
                 if (win.stack !== null) {
                     attachment = win.stack;
                 } else {
-                    attachment = fork.left.is_window(win.entity);
+                    attachment = fork.left.is_window(win.id);
                 }
 
                 win.was_attached_to = [fork, attachment];
-                this.gnome_forest.detach_window(win.entity);
+                this.gnome_forest.detach_window(win.id);
             } else if (!win.floating) {
                 if (win.was_attached_to) {
                     const [fork, attachment] = win.was_attached_to;
@@ -798,7 +798,7 @@ export class Ext {
                     // The fork may have left the tree while the window was minimized
                     if (!fork.detached) {
                         if (typeof attachment === 'boolean') {
-                            gnome_forest.forest.attach_fork(this, fork, win.entity, attachment);
+                            gnome_forest.forest.attach_fork(this, fork, win.id, attachment);
                             gnome_forest.tile(fork, fork.area);
                             return;
                         } else {
@@ -808,9 +808,9 @@ export class Ext {
                                 if (stack_info) {
                                     const stack_node: node.NodeStack = stack_info[1].inner;
 
-                                    gnome_forest.forest.on_attach(win.entity);
-                                    node.stack_insert(this, stack_node, win.entity, true);
-                                    stack.activate(win.entity);
+                                    gnome_forest.forest.on_attach(win.id);
+                                    node.stack_insert(this, stack_node, win.id, true);
+                                    stack.activate(win.id);
                                     gnome_forest.tile(fork, fork.area);
                                     return;
                                 }
@@ -850,7 +850,7 @@ export class Ext {
         if (is_new_window) {
             win.dont_animate_next_movement();
             actor.connect('first-frame', () => {
-                if (!this.movements.has(win.entity)) win.maybe_animate_next_movement();
+                if (!this.movements.has(win.id)) win.maybe_animate_next_movement();
             });
         }
 
@@ -861,7 +861,7 @@ export class Ext {
                     win.border = null;
                 }
 
-                this.on_destroy(win.entity);
+                this.on_destroy(win.id);
 
                 this.signals.forget_source(actor);
             }),
@@ -887,11 +887,11 @@ export class Ext {
         if (this.gnome_forest && !win.floating) {
             const id = this.workspace_id(win);
             const [monitor, workspace] = this.placement(win);
-            const tiled = this.gnome_forest.attached.contains(win.entity);
+            const tiled = this.gnome_forest.attached.contains(win.id);
             if (!tiled || id[0] != monitor || id[1] != workspace) {
                 win.ignore_detach = true;
                 if (win.is_tilable()) {
-                    this.gnome_forest.detach_window(win.entity);
+                    this.gnome_forest.detach_window(win.id);
                     this.gnome_forest.attach_to_workspace(win, id);
                 }
             }
@@ -911,17 +911,17 @@ export class Ext {
 
         // Fix phantom apps in dash
         const to_delete = [];
-        for (const [entity, window] of this.windows) {
+        for (const [window_id, window] of this.windows) {
             if (window.actor_exists()) continue;
 
             if (this.gnome_forest) {
-                this.gnome_forest.detach_window(entity);
+                this.gnome_forest.detach_window(window_id);
             } else {
-                to_delete.push(entity);
+                to_delete.push(window_id);
             }
         }
 
-        for (const entity of to_delete) this.forget_window(entity);
+        for (const window_id of to_delete) this.forget_window(window_id);
     }
 
     restack() {
@@ -1058,8 +1058,8 @@ export class Ext {
                     const refocus_tiled_window = () => {
                         // Re-focus a window that was unfocused.
                         let window: Window.MutterWindowHandle | null = null;
-                        for (const entity of this.focus_history.recent()) {
-                            window = this.windows.get(entity) ?? null;
+                        for (const window_id of this.focus_history.recent()) {
+                            window = this.windows.get(window_id) ?? null;
                             if (window) break;
                         }
 
@@ -1080,10 +1080,7 @@ export class Ext {
 
                             if (shell_window) {
                                 // Avoid re-focusing a window that's already focused.
-                                if (
-                                    !this.focus_history.is_current(shell_window.entity)
-                                    && !shell_window.meta.minimized
-                                ) {
+                                if (!this.focus_history.is_current(shell_window.id) && !shell_window.meta.minimized) {
                                     this.on_focused(shell_window);
                                 }
                             } else if (!meta_window.is_override_redirect()) {
@@ -1345,8 +1342,8 @@ export class Ext {
             for (const leaf of forest.iter(fork)) {
                 if (!leaf.is_leaf()) continue;
 
-                for (const entity of leaf.inner.entities) {
-                    const window = ext.windows.get(entity);
+                for (const window_id of leaf.inner.windows) {
+                    const window = ext.windows.get(window_id);
                     if (window) window.reassignment = true;
                 }
             }
@@ -1356,8 +1353,8 @@ export class Ext {
 
         // Each tiled window's monitor before, which is its tree's, and now
         const placements = function* (ext: Ext): Generator<[MonitorID, MonitorID]> {
-            for (const [entity, w] of ext.windows) {
-                if (!w.actor_exists() || !ext.gnome_forest?.attached.contains(entity)) continue;
+            for (const [window_id, w] of ext.windows) {
+                if (!w.actor_exists() || !ext.gnome_forest?.attached.contains(window_id)) continue;
 
                 yield [ext.placement(w)[0], w.monitor_id()];
             }
@@ -1424,12 +1421,12 @@ export class Ext {
         });
     }
 
-    /** Fetches the window entity which is associated with the metacity window metadata. */
-    private window_entity(meta: Meta.Window): WindowId | null {
-        const entity = meta.get_stable_sequence();
-        if (this.windows.has(entity)) return entity;
+    /** The id of a Meta.Window's managed window, which starts managing it if it should */
+    private window_id(meta: Meta.Window): WindowId | null {
+        const window_id = meta.get_stable_sequence();
+        if (this.windows.has(window_id)) return window_id;
 
-        // If not found, create a new entity with a MutterWindowHandle component.
+        // If it isn't managed yet, manage it with a MutterWindowHandle
         const actor = meta.get_compositor_private<Meta.WindowActor | null>();
         if (!actor) return null;
 
@@ -1446,12 +1443,12 @@ export class Ext {
         const window_app = Window.window_tracker.get_window_app(meta) as Shell.App | null;
         if (!window_app) return null;
 
-        const win = new Window.MutterWindowHandle(entity, meta, window_app, this);
-        this.windows.set(entity, win);
+        const win = new Window.MutterWindowHandle(window_id, meta, window_app, this);
+        this.windows.set(window_id, win);
 
         const grab_focus = () => {
             this.when_movements_empty(() => {
-                const window = this.windows.get(entity);
+                const window = this.windows.get(window_id);
                 if (window) this.register_fn(() => window.request_activate(false));
             });
         };
@@ -1466,7 +1463,7 @@ export class Ext {
             grab_focus();
         }
 
-        return entity;
+        return window_id;
     }
 
     /** Returns the tilable window(s) that the mouse pointer is currently hovering above. */
@@ -1494,7 +1491,7 @@ export class Ext {
      * mutter has it now
      */
     placement(win: Window.MutterWindowHandle): MonitorWorkspaceID {
-        const fork = this.gnome_forest?.forest.leaf_of(win.entity)?.parent;
+        const fork = this.gnome_forest?.forest.leaf_of(win.id)?.parent;
         return fork ? [fork.monitor, fork.workspace] : this.workspace_id(win);
     }
 

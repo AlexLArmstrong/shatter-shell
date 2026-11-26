@@ -26,7 +26,7 @@ export const TAB_HEIGHT_UNSCALED = 43 as const;
 const TAB_SEPARATION_UNSCALED = 3 as const;
 
 interface Tab {
-    entity: WindowId;
+    id: WindowId;
     button: number;
     button_signal: SignalID | null;
     signals: Array<SignalID>;
@@ -208,8 +208,8 @@ export class Stack {
         return this.index_of(this.active);
     }
 
-    private index_of(entity: WindowId): number {
-        return this.tabs.findIndex(tab => tab.entity === entity);
+    private index_of(window_id: WindowId): number {
+        return this.tabs.findIndex(tab => tab.id === window_id);
     }
 
     /**
@@ -220,31 +220,31 @@ export class Stack {
         if (!this.widgets) return;
 
         const windows: Array<MutterWindowHandle> = [];
-        for (const entity of this.node.entities) {
-            const window = this.ext.windows.get(entity);
+        for (const window_id of this.node.windows) {
+            const window = this.ext.windows.get(window_id);
             if (window) windows.push(window);
         }
 
-        const in_windows = (entity: WindowId) => windows.some(window => window.entity === entity);
+        const in_windows = (window_id: WindowId) => windows.some(window => window.id === window_id);
         const added: Array<WindowId> = [];
 
         for (let idx = this.tabs.length - 1; idx >= 0; idx -= 1) {
             const tab = this.tabs[idx];
-            if (tab && !in_windows(tab.entity)) {
+            if (tab && !in_windows(tab.id)) {
                 this.remove_tab_component(tab, idx);
             }
         }
 
         for (const window of windows) {
-            if (this.index_of(window.entity) === -1) {
+            if (this.index_of(window.id) === -1) {
                 this.add_tab(window);
-                added.push(window.entity);
+                added.push(window.id);
             }
         }
 
         const ordered: Array<Tab> = [];
         for (const window of windows) {
-            const tab = this.tabs[this.index_of(window.entity)];
+            const tab = this.tabs[this.index_of(window.id)];
             if (tab) ordered.push(tab);
         }
         this.tabs = ordered;
@@ -265,15 +265,15 @@ export class Stack {
     private add_tab(window: MutterWindowHandle) {
         if (!this.widgets) return;
 
-        const entity = window.entity;
-        const active = entity === this.active;
+        const window_id = window.id;
+        const active = window_id === this.active;
 
         const button = new TabButton(window, this.ext.settings);
         button.natural_height = this.tab_height - this.tab_separation;
         button.set_active(active ? TabActive.active : TabActive.inactive);
         const id = this.buttons.insert(button);
 
-        const tab: Tab = { entity, signals: [], button: id, button_signal: null };
+        const tab: Tab = { id: window_id, signals: [], button: id, button_signal: null };
         this.bind_hint_events(tab);
         this.tabs.push(tab);
         this.update_focus();
@@ -286,8 +286,8 @@ export class Stack {
     }
 
     /** Shows this window of the stack, by changing the leaf */
-    activate(entity: WindowId) {
-        Node.stack_activate(this.ext, this.node, entity);
+    activate(window_id: WindowId) {
+        Node.stack_activate(this.ext, this.node, window_id);
     }
 
     /**
@@ -301,9 +301,9 @@ export class Stack {
         this.drawn_active = this.active;
 
         for (const tab of this.tabs) {
-            this.window_exec(tab, tab.entity, window => {
-                const active = tab.entity === this.active;
-                const is_new = added.some(entity => entity === tab.entity);
+            this.window_exec(tab, tab.id, window => {
+                const active = tab.id === this.active;
+                const is_new = added.some(window_id => window_id === tab.id);
 
                 if (active) {
                     if (is_new) window.visibility.show_now();
@@ -364,7 +364,7 @@ export class Stack {
         if (button) {
             const change_id = settings.ext.connect('changed', (_, key) => {
                 if (key === 'hint-color-rgba') {
-                    const active = tab.entity === this.active;
+                    const active = tab.id === this.active;
                     button.set_active(active ? TabActive.active : TabActive.inactive);
                 }
                 return false;
@@ -372,7 +372,7 @@ export class Stack {
             button.connect('destroy', () => {
                 settings.ext.disconnect(change_id);
             });
-            const active = tab.entity === this.active;
+            const active = tab.id === this.active;
             button.set_active(active ? TabActive.active : TabActive.inactive);
         }
     }
@@ -381,12 +381,12 @@ export class Stack {
     tab_disconnect(c: Tab) {
         this.unwatch(c);
         const active = global.workspace_manager.get_active_workspace();
-        if (this.active_meta()?.get_workspace() === active) this.ext.windows.get(c.entity)?.visibility.fade_in();
+        if (this.active_meta()?.get_workspace() === active) this.ext.windows.get(c.id)?.visibility.fade_in();
     }
 
     /** Disconnects the signals of a tab, without changing whether its window is shown */
     private unwatch(c: Tab) {
-        const window = this.ext.windows.get(c.entity);
+        const window = this.ext.windows.get(c.id);
         if (window) {
             for (const s of c.signals) window.meta.disconnect(s);
         }
@@ -457,7 +457,7 @@ export class Stack {
             for (const c of tabs) this.unwatch(c);
             this.buttons.truncate(0);
             for (const c of tabs) {
-                const window = this.ext.windows.get(c.entity);
+                const window = this.ext.windows.get(c.id);
                 if (window) this.add_tab(window);
             }
 
@@ -544,7 +544,7 @@ export class Stack {
     /** Draws the tabs at half opacity unless the stack has the focused window, as libadwaita does with unfocused header bars. */
     private update_focus() {
         const focus_window = global.display.focus_window;
-        const focused = this.tabs.some(tab => this.ext.windows.get(tab.entity)?.meta === focus_window);
+        const focused = this.tabs.some(tab => this.ext.windows.get(tab.id)?.meta === focus_window);
 
         for (const tab of this.tabs) {
             const button = this.buttons.get(tab.button);
@@ -588,7 +588,7 @@ export class Stack {
     }
 
     private watch_signals(tab: Tab, window: MutterWindowHandle) {
-        const entity = window.entity;
+        const window_id = window.id;
         const widget = this.buttons.get(tab.button);
         if (!widget) return;
 
@@ -597,8 +597,8 @@ export class Stack {
 
         // Connect tab-clicked signal
         tab.button_signal = widget.connect('clicked', () => {
-            this.activate(entity);
-            this.window_exec(tab, entity, window => {
+            this.activate(window_id);
+            this.window_exec(tab, window_id, window => {
                 this.ext.register_fn(() => window.request_activate(false));
                 this.reposition();
             });
@@ -610,13 +610,13 @@ export class Stack {
         // Attach new signals
         tab.signals = [
             window.meta.connect('notify::title', () => {
-                this.window_exec(tab, entity, window => {
+                this.window_exec(tab, window_id, window => {
                     this.buttons.get(tab.button)?.set_title(window.title());
                 });
             }),
 
             window.meta.connect('notify::urgent', () => {
-                this.window_exec(tab, entity, window => {
+                this.window_exec(tab, window_id, window => {
                     if (!window.meta.has_focus()) {
                         this.buttons.get(tab.button)?.set_active(TabActive.urgent);
                     }
@@ -629,8 +629,8 @@ export class Stack {
         this.ext.show_border_on_focused();
     }
 
-    private window_exec(tab: Tab, entity: WindowId, func: (window: MutterWindowHandle) => void) {
-        const window = this.ext.windows.get(entity);
+    private window_exec(tab: Tab, window_id: WindowId, func: (window: MutterWindowHandle) => void) {
+        const window = this.ext.windows.get(window_id);
         if (window && window.actor_exists()) {
             func(window);
         } else {

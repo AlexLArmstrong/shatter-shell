@@ -214,7 +214,7 @@ export class GnomeTilingMode {
                     this.moving = true;
 
                     if (this.ext.gnome_forest) {
-                        const s = this.ext.gnome_forest.find_stack(focused.entity);
+                        const s = this.ext.gnome_forest.find_stack(focused.id);
                         if (s) {
                             this.move_from_stack(s, focused, direction);
                             this.moving = false;
@@ -281,25 +281,25 @@ export class GnomeTilingMode {
         if (!this.ext.gnome_forest) return;
 
         const inner = branch.inner;
-        Node.stack_remove(this.ext, inner, focused.entity);
-        this.ext.gnome_forest.detach_window(focused.entity);
+        Node.stack_remove(this.ext, inner, focused.id);
+        this.ext.gnome_forest.detach_window(focused.id);
 
         if (fork.right) {
             let left, right;
             if (reverse) {
                 left = branch;
-                right = Node.Node.window(focused.entity);
+                right = Node.Node.window(focused.id);
             } else {
-                left = Node.Node.window(focused.entity);
+                left = Node.Node.window(focused.id);
                 right = branch;
             }
 
             new_fork = this.unstack_from_fork(branch.inner, focused, fork, left, right, is_left);
         } else if (reverse) {
-            fork.right = Node.Node.window(focused.entity);
+            fork.right = Node.Node.window(focused.id);
         } else {
             fork.right = fork.left;
-            fork.left = Node.Node.window(focused.entity);
+            fork.left = Node.Node.window(focused.id);
         }
 
         const modifier = new_fork ?? fork;
@@ -318,7 +318,7 @@ export class GnomeTilingMode {
 
         const inner = branch.inner;
 
-        if (inner.entities.length === 1) {
+        if (inner.windows.length === 1) {
             this.ext.gnome_forest.toggle_stacking();
             this.overlay_watch(focused);
             return;
@@ -338,7 +338,7 @@ export class GnomeTilingMode {
             fork.set_area(rect);
         }
 
-        const fentity = focused.entity;
+        const focused_id = focused.id;
 
         const detach = (orientation: Clutter.Orientation, reverse: boolean) => {
             if (!this.ext.gnome_forest) return;
@@ -347,18 +347,18 @@ export class GnomeTilingMode {
                 let left, right;
                 if (reverse) {
                     left = branch;
-                    right = Node.Node.window(fentity);
+                    right = Node.Node.window(focused_id);
                 } else {
-                    left = Node.Node.window(fentity);
+                    left = Node.Node.window(focused_id);
                     right = branch;
                 }
 
                 new_fork = this.unstack_from_fork(inner, focused, fork, left, right, is_left);
             } else if (reverse) {
-                fork.right = Node.Node.window(fentity);
+                fork.right = Node.Node.window(focused_id);
             } else {
                 fork.right = fork.left;
-                fork.left = Node.Node.window(fentity);
+                fork.left = Node.Node.window(focused_id);
             }
 
             const modifier = new_fork ?? fork;
@@ -370,9 +370,9 @@ export class GnomeTilingMode {
         switch (direction) {
             case Direction.Left:
                 if (force_detach) {
-                    Node.stack_remove(this.ext, inner, fentity);
+                    Node.stack_remove(this.ext, inner, focused_id);
                     detach(Clutter.Orientation.HORIZONTAL, false);
-                } else if (!Node.stack_move_left(this.ext, inner, fentity)) {
+                } else if (!Node.stack_move_left(this.ext, inner, focused_id)) {
                     detach(Clutter.Orientation.HORIZONTAL, false);
                 }
 
@@ -381,9 +381,9 @@ export class GnomeTilingMode {
 
             case Direction.Right:
                 if (force_detach) {
-                    Node.stack_remove(this.ext, inner, fentity);
+                    Node.stack_remove(this.ext, inner, focused_id);
                     detach(Clutter.Orientation.HORIZONTAL, true);
-                } else if (!Node.stack_move_right(this.ext, inner, fentity)) {
+                } else if (!Node.stack_move_right(this.ext, inner, focused_id)) {
                     detach(Clutter.Orientation.HORIZONTAL, true);
                 }
 
@@ -391,12 +391,12 @@ export class GnomeTilingMode {
                 break;
 
             case Direction.Up:
-                Node.stack_remove(this.ext, inner, fentity);
+                Node.stack_remove(this.ext, inner, focused_id);
                 detach(Clutter.Orientation.VERTICAL, false);
                 break;
 
             case Direction.Down:
-                Node.stack_remove(this.ext, inner, fentity);
+                Node.stack_remove(this.ext, inner, focused_id);
                 detach(Clutter.Orientation.VERTICAL, true);
                 break;
         }
@@ -522,7 +522,7 @@ export class GnomeTilingMode {
         if (gnome_forest) {
             if (move_to instanceof MutterWindowHandle) {
                 // Check if we are moving onto a stack, and if so, move into the stack.
-                const stack_info = gnome_forest.find_stack(move_to.entity);
+                const stack_info = gnome_forest.find_stack(move_to.id);
                 if (stack_info) {
                     const [stack_fork, branch] = stack_info;
                     const stack = branch.inner;
@@ -530,18 +530,18 @@ export class GnomeTilingMode {
                     const placement = { auto: 0 } as const;
 
                     focused.ignore_detach = true;
-                    gnome_forest.detach_window(focused.entity);
+                    gnome_forest.detach_window(focused.id);
 
                     gnome_forest.update_stack(stack);
 
                     gnome_forest.tile(stack_fork, stack_fork.area);
 
                     focused.ignore_detach = true;
-                    gnome_forest.detach_window(focused.entity);
+                    gnome_forest.detach_window(focused.id);
                     gnome_forest.attach_to_window(move_to, focused, placement, stack_from_left);
                     watching = focused;
                 } else {
-                    const fork = gnome_forest.windows_are_siblings(focused.entity, move_to.entity);
+                    const fork = gnome_forest.windows_are_siblings(focused.id, move_to.id);
                     if (fork) {
                         if (!fork.right) {
                             Log.error('move_auto: detected as sibling, but fork lacks right branch');
@@ -549,7 +549,7 @@ export class GnomeTilingMode {
                         }
 
                         if (fork.left.is_leaf() && fork.left.inner.tabbed) {
-                            Node.stack_remove(this.ext, fork.left.inner, focused.entity);
+                            Node.stack_remove(this.ext, fork.left.inner, focused.id);
                         } else {
                             const temp = fork.right;
 
@@ -565,14 +565,14 @@ export class GnomeTilingMode {
                         const movement = { src: focused.meta.get_frame_rect() };
 
                         focused.ignore_detach = true;
-                        gnome_forest.detach_window(focused.entity);
+                        gnome_forest.detach_window(focused.id);
                         gnome_forest.attach_to_window(move_to, focused, movement, false);
                         watching = focused;
                     }
                 }
             } else {
                 focused.ignore_detach = true;
-                gnome_forest.detach_window(focused.entity);
+                gnome_forest.detach_window(focused.id);
                 gnome_forest.attach_to_workspace(focused, [move_to, this.ext.active_workspace()]);
                 watching = focused;
             }
@@ -686,7 +686,7 @@ export class GnomeTilingMode {
     swap(selector: window.MutterWindowHandle | null) {
         if (selector) {
             this.ext.set_overlay(selector.frame());
-            this.swap_window = selector.entity;
+            this.swap_window = selector.id;
         }
     }
 
@@ -731,7 +731,7 @@ export class GnomeTilingMode {
             const win = this.ext.get_focused_window();
             if (!win) return;
 
-            this.window = win.entity;
+            this.window = win.id;
 
             if (win.is_maximized()) {
                 win.meta.unmaximize();
@@ -820,7 +820,7 @@ export class GnomeTilingMode {
 
         win.move(rect);
 
-        this.ext.snapped.add(win.entity);
+        this.ext.snapped.add(win.id);
     }
 }
 

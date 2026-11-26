@@ -59,7 +59,7 @@ export function global(event: GlobalEvent): GlobalEventMessage {
 }
 
 export function window_move(ext: Ext, window: Window.MutterWindowHandle, rect: Mtk.Rectangle): WindowMove {
-    ext.movements.set(window.entity, rect);
+    ext.movements.set(window.id, rect);
     return { tag: 'window_move', window };
 }
 

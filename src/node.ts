@@ -43,8 +43,8 @@ export interface NodeStack {
     /** The index of the Stack in Forest.stacks that draws this leaf, which only a tabbed one has */
     idx: number | null;
     /** The windows, in the order of their tabs */
-    entities: Array<WindowId>;
-    /** The window that is shown. It's always one of the entities while there are any. */
+    windows: Array<WindowId>;
+    /** The window that is shown. It's always one of the windows while there are any. */
     active: WindowId;
     /** The window that was shown before, which is shown again when the active one leaves */
     prev_active: WindowId | null;
@@ -65,31 +65,31 @@ function sync_tabs(ext: Ext, node: NodeStack) {
     ext.gnome_forest?.update_stack(node);
 }
 
-export function stack_find(node: NodeStack, entity: WindowId) {
-    const idx = node.entities.findIndex(other => entity === other);
+export function stack_find(node: NodeStack, window_id: WindowId) {
+    const idx = node.windows.findIndex(other => window_id === other);
     return idx === -1 ? null : idx;
 }
 
 /** Shows this window of the stack, and remembers the one that was shown before */
-export function stack_activate(ext: Ext, node: NodeStack, entity: WindowId) {
-    if (stack_find(node, entity) === null) return;
+export function stack_activate(ext: Ext, node: NodeStack, window_id: WindowId) {
+    if (stack_find(node, window_id) === null) return;
 
-    if (node.active !== entity) {
+    if (node.active !== window_id) {
         node.prev_active = node.active;
-        node.active = entity;
+        node.active = window_id;
     }
 
     sync_tabs(ext, node);
 }
 
 /** Adds a window at either end of a stack, behind its active window */
-export function stack_insert(ext: Ext, node: NodeStack, entity: WindowId, at_end: boolean) {
+export function stack_insert(ext: Ext, node: NodeStack, window_id: WindowId, at_end: boolean) {
     if (at_end) {
-        node.entities.push(entity);
+        node.windows.push(window_id);
     } else {
-        node.entities.unshift(entity);
+        node.windows.unshift(window_id);
     }
-    node.parent?.hold_window(node, entity);
+    node.parent?.hold_window(node, window_id);
 
     sync_tabs(ext, node);
 }
@@ -98,17 +98,17 @@ export function stack_insert(ext: Ext, node: NodeStack, entity: WindowId, at_end
  * Removes a window from a stack, returning where it was. If it was the active one, the previously
  * active window takes over if it's still there, and otherwise the one that is now in its place.
  */
-export function stack_remove(ext: Ext, node: NodeStack, entity: WindowId): number | null {
-    const idx = stack_find(node, entity);
+export function stack_remove(ext: Ext, node: NodeStack, window_id: WindowId): number | null {
+    const idx = stack_find(node, window_id);
     if (idx === null) return null;
 
-    node.entities.splice(idx, 1);
-    node.parent?.let_go_window(node, entity);
+    node.windows.splice(idx, 1);
+    node.parent?.let_go_window(node, window_id);
 
-    if (node.prev_active === entity) node.prev_active = null;
+    if (node.prev_active === window_id) node.prev_active = null;
 
-    if (node.active === entity) {
-        const next = node.prev_active ?? node.entities[Math.min(idx, node.entities.length - 1)];
+    if (node.active === window_id) {
+        const next = node.prev_active ?? node.windows[Math.min(idx, node.windows.length - 1)];
         if (next !== undefined) node.active = next;
         node.prev_active = null;
     }
@@ -121,37 +121,37 @@ export function stack_remove(ext: Ext, node: NodeStack, entity: WindowId): numbe
  * Puts another window in the place of one in a stack, such as when swapping windows, and makes it
  * active if that one was
  */
-export function stack_replace(ext: Ext, node: NodeStack, old: WindowId, entity: WindowId) {
+export function stack_replace(ext: Ext, node: NodeStack, old: WindowId, window_id: WindowId) {
     const idx = stack_find(node, old);
     if (idx === null) return;
 
-    node.entities[idx] = entity;
-    node.parent?.hold_window(node, entity);
+    node.windows[idx] = window_id;
+    node.parent?.hold_window(node, window_id);
     // A window that is still in the stack, such as when it replaces itself, stays linked to it
     if (stack_find(node, old) === null) node.parent?.let_go_window(node, old);
-    if (node.active === old) node.active = entity;
-    if (node.prev_active === old) node.prev_active = entity;
+    if (node.active === old) node.active = window_id;
+    if (node.prev_active === old) node.prev_active = window_id;
 
     sync_tabs(ext, node);
 }
 
 function stack_swap(ext: Ext, node: NodeStack, from: number, to: number) {
-    const a = node.entities[from];
-    const b = node.entities[to];
+    const a = node.windows[from];
+    const b = node.windows[to];
     if (a === undefined || b === undefined) return;
 
-    node.entities[from] = b;
-    node.entities[to] = a;
+    node.windows[from] = b;
+    node.windows[to] = a;
     sync_tabs(ext, node);
 }
 
 /** Move the window in a stack to the left, and detach if it it as the end. */
-export function stack_move_left(ext: Ext, node: NodeStack, entity: WindowId): boolean {
-    const idx = stack_find(node, entity);
+export function stack_move_left(ext: Ext, node: NodeStack, window_id: WindowId): boolean {
+    const idx = stack_find(node, window_id);
     if (idx === null) return false;
 
     if (idx === 0) {
-        stack_remove(ext, node, entity);
+        stack_remove(ext, node, window_id);
         return false;
     }
 
@@ -160,12 +160,12 @@ export function stack_move_left(ext: Ext, node: NodeStack, entity: WindowId): bo
 }
 
 /** Move the window in a stack to the right, and detach if it is at the end. */
-export function stack_move_right(ext: Ext, node: NodeStack, entity: WindowId): boolean {
-    const idx = stack_find(node, entity);
+export function stack_move_right(ext: Ext, node: NodeStack, window_id: WindowId): boolean {
+    const idx = stack_find(node, window_id);
     if (idx === null) return false;
 
-    if (idx === node.entities.length - 1) {
-        stack_remove(ext, node, entity);
+    if (idx === node.windows.length - 1) {
+        stack_remove(ext, node, window_id);
         return false;
     }
 
@@ -175,7 +175,7 @@ export function stack_move_right(ext: Ext, node: NodeStack, entity: WindowId): b
 
 export type NodeADT = NodeFork | NodeStack;
 
-/** A tiling node may either refer to a window entity, or another fork entity */
+/** A node of the tree: a leaf of windows, or a fork */
 export class Node<T extends NodeADT = NodeADT> {
     /** The actual data for this node */
     inner: T;
@@ -190,13 +190,13 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Creates a leaf of one window, without tabs */
-    static window(entity: WindowId): Node<NodeStack> {
+    static window(window_id: WindowId): Node<NodeStack> {
         return new Node({
             kind: NodeKind.STACK,
             tabbed: false,
             idx: null,
-            entities: [entity],
-            active: entity,
+            windows: [window_id],
+            active: window_id,
             prev_active: null,
             rect: null,
             parent: null,
@@ -211,7 +211,7 @@ export class Node<T extends NodeADT = NodeADT> {
                 fmt += `    fork: (${this.inner.fork.id})\n  }`;
                 break;
             case NodeKind.STACK:
-                fmt += `    tabbed: ${this.inner.tabbed}, entities: ${this.inner.entities}\n  }`;
+                fmt += `    tabbed: ${this.inner.tabbed}, windows: ${this.inner.windows}\n  }`;
                 break;
         }
         return fmt;
@@ -223,13 +223,13 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Whether this is a leaf that holds the window, with tabs or without */
-    has(entity: WindowId): this is Node<NodeStack> {
-        return this.is_leaf() && this.inner.entities.some(other => entity === other);
+    has(window_id: WindowId): this is Node<NodeStack> {
+        return this.is_leaf() && this.inner.windows.some(other => window_id === other);
     }
 
     /** Whether this is a leaf with tabs that holds the window */
-    is_in_stack(entity: WindowId): this is Node<NodeStack> {
-        return this.has(entity) && this.inner.tabbed;
+    is_in_stack(window_id: WindowId): this is Node<NodeStack> {
+        return this.has(window_id) && this.inner.tabbed;
     }
 
     /** Asks if this fork is the fork we are looking for */
@@ -238,13 +238,13 @@ export class Node<T extends NodeADT = NodeADT> {
     }
 
     /** Whether this is a leaf without tabs, which holds only this window */
-    is_window(entity: WindowId): this is Node<NodeStack> {
-        return this.has(entity) && !this.inner.tabbed;
+    is_window(window_id: WindowId): this is Node<NodeStack> {
+        return this.has(window_id) && !this.inner.tabbed;
     }
 
     /** The window of a leaf without tabs, or null for any other node */
     lone_window(): WindowId | null {
-        return this.is_leaf() && !this.inner.tabbed ? (this.inner.entities[0] ?? null) : null;
+        return this.is_leaf() && !this.inner.tabbed ? (this.inner.windows[0] ?? null) : null;
     }
 
     /** Calculates the future arrangement of windows in this node */
@@ -272,8 +272,8 @@ export class Node<T extends NodeADT = NodeADT> {
                     this.inner.rect.height -= tab_height;
                 }
 
-                for (const entity of this.inner.entities) {
-                    record(entity, parent, this.inner.tabbed ? this.inner.rect : this.inner.rect.copy());
+                for (const window_id of this.inner.windows) {
+                    record(window_id, parent, this.inner.tabbed ? this.inner.rect : this.inner.rect.copy());
                 }
 
                 if (this.inner.tabbed && ext.gnome_forest) {

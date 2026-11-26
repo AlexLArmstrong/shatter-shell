@@ -51,10 +51,8 @@ export class FocusHistory<Id, Workspace = number> {
     }
 
     /**
-     * Removes a window that's gone. If it was the current window, the previous one becomes current.
-     *
-     * A workspace that it was focused on last is left without a last window. Otherwise, as entities
-     * get reused, the workspace could later name a window that was never focused on it.
+     * Removes a window that's gone. If it was the current window, the previous one becomes current,
+     * and a workspace that it was focused on last is left without a last window.
      */
     forget(id: Id) {
         if (this.previous_ !== null && this.eq(this.previous_, id)) {

@@ -198,7 +198,7 @@ export class Fork {
                 inner.fork.parent = this;
                 break;
             case NodeKind.STACK:
-                for (const window of inner.entities) this.hold_window(inner, window);
+                for (const window of inner.windows) this.hold_window(inner, window);
                 break;
         }
     }
@@ -212,7 +212,7 @@ export class Fork {
                 if (inner.fork.parent === this) inner.fork.parent = null;
                 break;
             case NodeKind.STACK:
-                for (const window of inner.entities) this.let_go_window(inner, window);
+                for (const window of inner.windows) this.let_go_window(inner, window);
                 break;
         }
     }
@@ -245,8 +245,8 @@ export class Fork {
         return this.is_horizontal() ? this.area.height : this.area.width;
     }
 
-    find_branch(entity: WindowId): Node | null {
-        const locate = (branch: Node): Node | null => (branch.has(entity) ? branch : null);
+    find_branch(window_id: WindowId): Node | null {
+        const locate = (branch: Node): Node | null => (branch.has(window_id) ? branch : null);
 
         const node = locate(this.left);
         if (node) return node;
@@ -265,11 +265,11 @@ export class Fork {
 
     /** Replaces the association of a window in a fork with another */
     replace_window(ext: Ext, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
-        const branch = this.left.has(a.entity) ? this.left : this.right?.has(a.entity) ? this.right : null;
+        const branch = this.left.has(a.id) ? this.left : this.right?.has(a.id) ? this.right : null;
         if (!branch?.is_leaf()) return null;
 
         const leaf = branch.inner;
-        return () => node.stack_replace(ext, leaf, a.entity, b.entity);
+        return () => node.stack_replace(ext, leaf, a.id, b.id);
     }
 
     /** Sets a new area for this fork */
@@ -382,8 +382,8 @@ export class Fork {
                         // Its monitor and workspace are the tree's, which have already changed
                         break;
                     case NodeKind.STACK:
-                        for (const entity of child.inner.entities) {
-                            const window = ext.windows.get(entity);
+                        for (const window_id of child.inner.windows) {
+                            const window = ext.windows.get(window_id);
 
                             if (window) {
                                 ext.size_signals_block(window);
@@ -457,23 +457,23 @@ function minimum_size(tiler: Forest, ext: Ext, branch: Node): [number, number] {
     switch (branch.inner.kind) {
         case NodeKind.STACK:
             // A leaf without tabs is a window on its own
-            if (!branch.inner.tabbed) return window_minimum_size(ext, branch.inner.entities[0]!);
-            return stack_minimum_size(ext, branch.inner.entities);
+            if (!branch.inner.tabbed) return window_minimum_size(ext, branch.inner.windows[0]!);
+            return stack_minimum_size(ext, branch.inner.windows);
         case NodeKind.FORK:
             return fork_minimum_size(ext, tiler, branch.inner.fork);
     }
 }
 
-function window_minimum_size(ext: Ext, entity: WindowId): [number, number] {
-    return ext.windows.get(entity)?.minimum_size() ?? [0, 0];
+function window_minimum_size(ext: Ext, window_id: WindowId): [number, number] {
+    return ext.windows.get(window_id)?.minimum_size() ?? [0, 0];
 }
 
 /** Gets the stack's minimum size based on its windows and the tab bar. */
-function stack_minimum_size(ext: Ext, entities: WindowId[]): [number, number] {
+function stack_minimum_size(ext: Ext, windows: WindowId[]): [number, number] {
     let width = 0;
     let height = 0;
-    for (const entity of entities) {
-        const [window_width, window_height] = window_minimum_size(ext, entity);
+    for (const window_id of windows) {
+        const [window_width, window_height] = window_minimum_size(ext, window_id);
         width = Math.max(width, window_width);
         height = Math.max(height, window_height);
     }
