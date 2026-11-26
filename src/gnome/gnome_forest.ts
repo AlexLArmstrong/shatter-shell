@@ -22,15 +22,12 @@ import { Tags } from '../tags.js';
 /** The GNOME side of the Forest: tiles windows into its trees and lays them out, while auto-tiling is on */
 export class GnomeForest {
     forest: Forest;
-    attached: ecs.Storage<Entity>;
 
     constructor(
         private readonly ext: Ext,
         forest: Forest,
-        attached: ecs.Storage<Entity>,
     ) {
         this.forest = forest;
-        this.attached = attached;
     }
 
     /** Swap window associations in the auto-tiler
@@ -78,10 +75,8 @@ export class GnomeForest {
         }
 
         const a_fn = a_fork.replace_window(this.ext, a_win, b_win);
-        this.forest.on_attach(a_ent, b);
 
         const b_fn = b_fork.replace_window(this.ext, b_win, a_win);
-        this.forest.on_attach(b_ent, a);
 
         if (a_fn) a_fn();
         if (b_fn) b_fn();
@@ -128,8 +123,8 @@ export class GnomeForest {
             rect.height -= this.ext.sizes.gap_outer * 2;
         }
 
-        const [entity, fork] = this.forest.create_toplevel(win, rect.copy(), workspace_id);
-        this.forest.on_attach(entity, win.entity);
+        const [, fork] = this.forest.create_toplevel(win, rect.copy(), workspace_id);
+        this.forest.on_attach(win.entity);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
 
@@ -240,7 +235,6 @@ export class GnomeForest {
 
         const prev_fork = this.ext.windows.get(win)?.leaf?.parent?.entity ?? null;
         if (prev_fork) {
-            this.attached.remove(win);
             const reflow_fork = this.forest.detach(this.ext, prev_fork, win);
 
             if (reflow_fork) {

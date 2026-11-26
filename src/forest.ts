@@ -70,8 +70,8 @@ export class Forest extends Ecs.World {
 
     stacks: arena.Arena<Stack> = new Arena();
 
-    /** The callback to execute when a window has been attached to a fork. */
-    on_attach: (parent: Entity, child: Entity) => void = () => {};
+    /** The callback to execute when a window starts being tiled */
+    on_attach: (window: Entity) => void = () => {};
 
     /** Likewise for detachments */
     on_detach: (child: Entity) => void = () => {};
@@ -129,9 +129,7 @@ export class Forest extends Ecs.World {
                     fork.monitor,
                 )[0];
                 fork.right = Node.Node.fork(this.forks.get(new_fork)!);
-                this.on_attach(new_fork, window.entity);
             } else {
-                this.on_attach(fork.entity, window.entity);
                 fork.right = fork.left;
             }
 
@@ -146,15 +144,12 @@ export class Forest extends Ecs.World {
                     fork.monitor,
                 )[0];
                 fork.left = Node.Node.fork(this.forks.get(new_fork)!);
-                this.on_attach(new_fork, window.entity);
-            } else {
-                this.on_attach(fork.entity, window.entity);
             }
 
             fork.right = node;
         }
 
-        this.on_attach(fork.entity, window.entity);
+        this.on_attach(window.entity);
     }
 
     attach_stack(
@@ -172,7 +167,7 @@ export class Forest extends Ecs.World {
 
                 Node.stack_add(stack, window, !stack_from_left);
 
-                this.on_attach(fork.entity, new_entity);
+                this.on_attach(new_entity);
 
                 ext.gnome_forest?.update_stack(stack);
 
@@ -244,14 +239,15 @@ export class Forest extends Ecs.World {
         const fork_and_place_on_left = (entity: Entity, fork: Fork.Fork): [Entity, Fork.Fork] | null => {
             const area = fork.area_of_left(ext);
 
-            const [fork_entity, new_fork] = this.create_fork(fork.left, right_node, area, fork.workspace, fork.monitor);
+            const [, new_fork] = this.create_fork(fork.left, right_node, area, fork.workspace, fork.monitor);
 
             fork.left = Node.Node.fork(new_fork);
 
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
 
-            return this._attach(onto_entity, new_entity, this.on_attach, entity, fork, [fork_entity, new_fork]);
+            this.on_attach(new_entity);
+            return [entity, fork];
         };
 
         /** Create a new fork and place this new fork on the right branch */
@@ -261,20 +257,15 @@ export class Forest extends Ecs.World {
             right_branch: Node.Node,
         ): [Entity, Fork.Fork] | null => {
             const area = fork.area_of_right(ext);
-            const [fork_entity, new_fork] = this.create_fork(
-                right_branch,
-                right_node,
-                area,
-                fork.workspace,
-                fork.monitor,
-            );
+            const [, new_fork] = this.create_fork(right_branch, right_node, area, fork.workspace, fork.monitor);
 
             fork.right = Node.Node.fork(new_fork);
 
             const [left, right] = area_of_halves(new_fork);
             place(place_by, new_fork, left, right);
 
-            return this._attach(onto_entity, new_entity, this.on_attach, entity, fork, [fork_entity, new_fork]);
+            this.on_attach(new_entity);
+            return [entity, fork];
         };
 
         const right_node = Node.Node.window(new_window);
@@ -292,7 +283,8 @@ export class Forest extends Ecs.World {
                         place_by_keyboard(fork, place_by.src, left, right);
                     }
 
-                    return this._attach(onto_entity, new_entity, this.on_attach, entity, fork, null);
+                    this.on_attach(new_entity);
+                    return [entity, fork];
                 }
             } else if (fork.left.is_in_stack(onto_entity)) {
                 const stack = fork.left.inner;
@@ -310,8 +302,7 @@ export class Forest extends Ecs.World {
         return null;
     }
 
-    /** Assigns the callback to trigger when a window is attached to a fork */
-    connect_on_attach(callback: (parent: Entity, child: Entity) => void): this {
+    connect_on_attach(callback: (window: Entity) => void): this {
         this.on_attach = callback;
         return this;
     }
@@ -638,7 +629,6 @@ export class Forest extends Ecs.World {
                 parent.right = branch;
             }
 
-            this.reassign_sibling(branch, parent_entity);
             this.delete_entity(child_entity);
         }
 
@@ -648,40 +638,13 @@ export class Forest extends Ecs.World {
     reassign_to_parent(child: Fork.Fork, reassign: Node.Node) {
         const p_fork = child.parent;
         if (p_fork) {
-            const p = p_fork.entity;
             if (p_fork.left.is_fork(child.entity)) {
                 p_fork.left = reassign;
             } else {
                 p_fork.right = reassign;
             }
 
-            const inner = reassign.inner;
-
-            switch (inner.kind) {
-                case Node.NodeKind.FORK:
-                    break;
-                case Node.NodeKind.WINDOW:
-                    this.on_attach(p, inner.window.entity);
-                    break;
-                case Node.NodeKind.STACK:
-                    for (const window of inner.windows) this.on_attach(p, window.entity);
-            }
-
             this.delete_entity(child.entity);
-        }
-    }
-
-    private reassign_sibling(sibling: Node.Node, parent: Entity) {
-        switch (sibling.inner.kind) {
-            case Node.NodeKind.FORK:
-                break;
-            case Node.NodeKind.WINDOW:
-                this.on_attach(parent, sibling.inner.window.entity);
-                break;
-            case Node.NodeKind.STACK:
-                for (const window of sibling.inner.windows) {
-                    this.on_attach(parent, window.entity);
-                }
         }
     }
 
@@ -696,9 +659,6 @@ export class Forest extends Ecs.World {
         if (c_fork) {
             p_fork.left = c_fork.left;
             p_fork.right = c_fork.right;
-
-            this.reassign_sibling(p_fork.left, parent_entity);
-            if (p_fork.right) this.reassign_sibling(p_fork.right, parent_entity);
 
             this.delete_entity(child_entity);
         } else {
@@ -847,24 +807,6 @@ export class Forest extends Ecs.World {
                 this.readjust_fork_ratio_by_right(ext, crect.height, fork_c, fork_c.area.height);
             }
         }
-    }
-
-    private _attach(
-        onto_entity: Entity,
-        new_entity: Entity,
-        assoc: (a: Entity, b: Entity) => void,
-        entity: Entity,
-        fork: Fork.Fork,
-        result: [Entity, Fork.Fork] | null,
-    ): [Entity, Fork.Fork] | null {
-        if (result) {
-            assoc(result[0], onto_entity);
-            assoc(result[0], new_entity);
-        } else {
-            assoc(entity, new_entity);
-        }
-
-        return [entity, fork];
     }
 }
 

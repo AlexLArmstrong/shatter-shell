@@ -703,18 +703,12 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    on_tile_attach(entity: Entity, window: Entity) {
-        if (this.gnome_forest) {
-            if (!this.gnome_forest.attached.contains(window)) {
-                this.windows.with(window, w => {
-                    if (w.prev_rect === null) {
-                        w.prev_rect = w.meta.get_frame_rect();
-                    }
-                });
+    on_tile_attach(window: Entity) {
+        this.windows.with(window, w => {
+            if (w.prev_rect === null) {
+                w.prev_rect = w.meta.get_frame_rect();
             }
-
-            this.gnome_forest.attached.insert(window, entity);
-        }
+        });
     }
 
     on_tile_detach(win: Entity) {
@@ -856,7 +850,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                                     win.stack = attachment;
                                     node.stack_add(leaf, win);
                                     gnome_forest.update_stack(leaf);
-                                    gnome_forest.forest.on_attach(fork.entity, win.entity);
+                                    gnome_forest.forest.on_attach(win.entity);
                                     stack.activate(win.entity);
                                     gnome_forest.tile(fork, fork.area);
                                     return;

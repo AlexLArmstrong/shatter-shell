@@ -186,12 +186,6 @@ export class GnomeTilingMode {
             fork.right = Node.Node.fork(new_fork[1]);
         }
 
-        // Update parent assignments
-        forest.on_attach(new_fork[0], focused.entity);
-        for (const window of stack.windows) {
-            forest.on_attach(new_fork[0], window.entity);
-        }
-
         return new_fork[1];
     }
 
@@ -315,7 +309,6 @@ export class GnomeTilingMode {
 
         const modifier = new_fork ?? fork;
         modifier.set_orientation(orientation);
-        this.ext.gnome_forest.forest.on_attach(modifier.entity, focused.entity);
         this.ext.gnome_forest.tile(fork, fork.area);
         this.overlay_watch(focused);
     }
@@ -377,7 +370,6 @@ export class GnomeTilingMode {
 
             const modifier = new_fork ?? fork;
             modifier.set_orientation(orientation);
-            forest.on_attach(modifier.entity, fentity);
             this.ext.gnome_forest.tile(fork, fork.area);
             this.overlay_watch(focused);
         };
@@ -559,7 +551,6 @@ export class GnomeTilingMode {
                     focused.ignore_detach = true;
                     gnome_forest.detach_window(focused.entity);
 
-                    gnome_forest.forest.on_attach(stack_fork.entity, focused.entity);
                     gnome_forest.update_stack(stack);
 
                     gnome_forest.tile(stack_fork, stack_fork.area);
