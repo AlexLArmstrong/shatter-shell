@@ -6,7 +6,6 @@ import type { Ext } from './extension.js';
 import type { Forest } from './forest.js';
 import type { Node, NodeStack, TabBars } from './node.js';
 
-import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import * as node from './node.js';
 import { TAB_HEIGHT_UNSCALED } from './stack.js';
@@ -164,21 +163,7 @@ export class Fork {
     }
 
     find_branch(entity: Entity): Node | null {
-        const locate = (branch: Node): Node | null => {
-            switch (branch.inner.kind) {
-                case NodeKind.STACK:
-                    for (const e of branch.inner.windows) {
-                        if (Ecs.entity_eq(e.entity, entity)) {
-                            return branch;
-                        }
-                    }
-                    break;
-                case NodeKind.FORK:
-                    break;
-            }
-
-            return null;
-        };
+        const locate = (branch: Node): Node | null => (branch.has(entity) ? branch : null);
 
         const node = locate(this.left);
         if (node) return node;
@@ -197,42 +182,11 @@ export class Fork {
 
     /** Replaces the association of a window in a fork with another */
     replace_window(tabs: TabBars, a: MutterWindowHandle, b: MutterWindowHandle): (() => void) | null {
-        let closure = null;
+        const branch = this.left.has(a.entity) ? this.left : this.right?.has(a.entity) ? this.right : null;
+        if (!branch?.is_leaf()) return null;
 
-        const check_right = () => {
-            if (this.right) {
-                const inner = this.right.inner;
-                if (inner.kind === NodeKind.STACK) {
-                    const idx = node.stack_find(inner, a.entity);
-                    if (idx === null) {
-                        closure = null;
-                        return;
-                    }
-
-                    closure = () => {
-                        node.stack_replace(tabs, inner, a.entity, b);
-                    };
-                }
-            }
-        };
-
-        switch (this.left.inner.kind) {
-            case NodeKind.FORK:
-                check_right();
-                break;
-            case NodeKind.STACK:
-                const inner_s = this.left.inner;
-                const idx = node.stack_find(inner_s, a.entity);
-                if (idx !== null) {
-                    closure = () => {
-                        node.stack_replace(tabs, inner_s, a.entity, b);
-                    };
-                } else {
-                    check_right();
-                }
-        }
-
-        return closure;
+        const leaf = branch.inner;
+        return () => node.stack_replace(tabs, leaf, a.entity, b);
     }
 
     /** Sets a new area for this fork */
@@ -360,6 +314,7 @@ export class Fork {
                     case NodeKind.STACK:
                         for (const window of child.inner.windows) {
                             ext.size_signals_block(window);
+                            window.reassignment = false;
                             window.known_workspace = workspace;
                             window.meta.change_workspace_by_index(workspace, true);
                             ext.monitors.insert(window.entity, [monitor, workspace]);
