@@ -9,10 +9,8 @@ import * as Ecs from './ecs.js';
 import { MutterWindowHandle } from './gnome/mutter_window_handle.js';
 import { TAB_HEIGHT_UNSCALED } from './stack.js';
 
-/** A node is either a fork, a window, or a stack. */
 export enum NodeKind {
     FORK = 1,
-    WINDOW = 2,
     STACK = 3,
 }
 
@@ -22,28 +20,15 @@ export interface NodeFork {
     parent: Fork | null;
 }
 
-/** Identifies this node as a window */
-export interface NodeWindow {
-    kind: NodeKind.WINDOW;
-    window: MutterWindowHandle;
-    parent: Fork | null;
-}
-
 export interface NodeStack {
     kind: NodeKind.STACK;
-    idx: number;
+    tabbed: boolean;
+    idx: number | null;
     windows: Array<MutterWindowHandle>;
     active: MutterWindowHandle;
     prev_active: MutterWindowHandle | null;
     rect: Mtk.Rectangle | null;
     parent: Fork | null;
-}
-
-export function window_set(node: NodeWindow, window: MutterWindowHandle) {
-    const previous = node.window;
-    node.window = window;
-    node.parent?.hold_window(node, window);
-    node.parent?.let_go_window(node, previous);
 }
 
 /*
@@ -162,9 +147,7 @@ export function stack_move_right(tabs: TabBars | null, node: NodeStack, entity: 
     return true;
 }
 
-export type NodeLeaf = NodeWindow | NodeStack;
-
-export type NodeADT = NodeFork | NodeWindow | NodeStack;
+export type NodeADT = NodeFork | NodeStack;
 
 /** A tiling node may either refer to a window entity, or another fork entity */
 export class Node<T extends NodeADT = NodeADT> {
@@ -180,36 +163,29 @@ export class Node<T extends NodeADT = NodeADT> {
         return new Node({ kind: NodeKind.FORK, fork, parent: null });
     }
 
-    /** Create the window variant of a `Node` */
-    static window(window: MutterWindowHandle): Node<NodeWindow> {
-        return new Node({ kind: NodeKind.WINDOW, window, parent: null });
-    }
-
-    static stacked(window: MutterWindowHandle, idx: number): Node<NodeStack> {
+    static window(window: MutterWindowHandle): Node<NodeStack> {
         return new Node({
             kind: NodeKind.STACK,
+            tabbed: false,
+            idx: null,
             windows: [window],
             active: window,
             prev_active: null,
-            idx,
             rect: null,
             parent: null,
         });
     }
 
-    has(entity: Entity): boolean {
-        return this.is_window(entity) || this.is_in_stack(entity);
+    is_leaf(): this is Node<NodeStack> {
+        return this.inner.kind === NodeKind.STACK;
     }
 
-    /** Check if the entity exists as a child of this stack */
-    is_in_stack(entity: Entity): this is Node<T> & { inner: NodeStack } {
-        if (this.inner.kind === NodeKind.STACK) {
-            for (const compare of this.inner.windows) {
-                if (Ecs.entity_eq(entity, compare.entity)) return true;
-            }
-        }
+    has(entity: Entity): this is Node<NodeStack> {
+        return this.is_leaf() && this.inner.windows.some(other => Ecs.entity_eq(entity, other.entity));
+    }
 
-        return false;
+    is_in_stack(entity: Entity): this is Node<NodeStack> {
+        return this.has(entity) && this.inner.tabbed;
     }
 
     /** Asks if this fork is the fork we are looking for */
@@ -217,9 +193,12 @@ export class Node<T extends NodeADT = NodeADT> {
         return this.inner.kind === NodeKind.FORK && Ecs.entity_eq(this.inner.fork.entity, entity);
     }
 
-    /** Asks if this window is the window we are looking for */
-    is_window(entity: Entity): boolean {
-        return this.inner.kind === NodeKind.WINDOW && Ecs.entity_eq(this.inner.window.entity, entity);
+    is_window(entity: Entity): this is Node<NodeStack> {
+        return this.has(entity) && !this.inner.tabbed;
+    }
+
+    lone_window(): MutterWindowHandle | null {
+        return this.is_leaf() && !this.inner.tabbed ? (this.inner.windows[0] ?? null) : null;
     }
 
     /** Calculates the future arrangement of windows in this node */
@@ -238,21 +217,19 @@ export class Node<T extends NodeADT = NodeADT> {
                 }
 
                 break;
-            case NodeKind.WINDOW:
-                record(this.inner.window.entity, parent, area.copy());
-                break;
             case NodeKind.STACK:
-                const tab_height = ext.sizes.scale * TAB_HEIGHT_UNSCALED;
-
                 this.inner.rect = area.copy();
-                this.inner.rect.y += tab_height;
-                this.inner.rect.height -= tab_height;
-
-                for (const window of this.inner.windows) {
-                    record(window.entity, parent, this.inner.rect);
+                if (this.inner.tabbed) {
+                    const tab_height = ext.sizes.scale * TAB_HEIGHT_UNSCALED;
+                    this.inner.rect.y += tab_height;
+                    this.inner.rect.height -= tab_height;
                 }
 
-                if (ext.gnome_forest) {
+                for (const window of this.inner.windows) {
+                    record(window.entity, parent, this.inner.tabbed ? this.inner.rect : this.inner.rect.copy());
+                }
+
+                if (this.inner.tabbed && ext.gnome_forest) {
                     ext.gnome_forest.forest.stack_updates.push([this.inner, parent]);
                 }
         }

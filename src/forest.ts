@@ -70,6 +70,10 @@ export class Forest extends Ecs.World {
 
     stacks: arena.Arena<Stack> = new Arena();
 
+    view_of(leaf: Node.NodeStack): Stack | null {
+        return leaf.idx === null ? null : this.stacks.get(leaf.idx);
+    }
+
     measure(ext: Ext, fork: Fork.Fork, area: Mtk.Rectangle) {
         fork.measure(this, ext, area, this.on_record());
     }
@@ -151,7 +155,7 @@ export class Forest extends Ecs.World {
         new_entity: Entity,
         stack_from_left: boolean,
     ): [Entity, Fork.Fork] | null {
-        const container = this.stacks.get(stack.idx);
+        const container = this.view_of(stack);
         if (container) {
             const window = ext.windows.get(new_entity);
             if (window) {
@@ -379,7 +383,6 @@ export class Forest extends Ecs.World {
                     case Node.NodeKind.FORK:
                         this.reassign_children_to_parent(fork_entity, fork.right.inner.fork.entity, fork);
                         break;
-                    case Node.NodeKind.WINDOW:
                     case Node.NodeKind.STACK:
                         const detached = fork.right;
                         fork.left = detached;
@@ -419,7 +422,6 @@ export class Forest extends Ecs.World {
                         case Node.NodeKind.FORK:
                             this.reassign_children_to_parent(fork_entity, fork.left.inner.fork.entity, fork);
                             break;
-                        case Node.NodeKind.WINDOW:
                         case Node.NodeKind.STACK:
                             fork.right = null;
                             break;
@@ -541,16 +543,7 @@ export class Forest extends Ecs.World {
         };
 
         for (const node of this.iter(entity)) {
-            switch (node.inner.kind) {
-                case Node.NodeKind.WINDOW:
-                    window_compare(node.inner.window);
-                    break;
-                case Node.NodeKind.STACK:
-                    window_compare(node.inner.windows[0]!);
-                    break;
-                case Node.NodeKind.FORK:
-                    break;
-            }
+            if (node.is_leaf()) window_compare(node.inner.windows[0]!);
         }
 
         return largest_window;
@@ -565,7 +558,7 @@ export class Forest extends Ecs.World {
         movement: movement.Movement,
         crect: Mtk.Rectangle,
     ) {
-        const is_left = fork_c.left.is_window(win_e) || fork_c.left.is_in_stack(win_e);
+        const is_left = fork_c.left.has(win_e);
         if ((movement & Movement.SHRINK) != 0) {
             this.shrink_sibling(ext, fork_e, fork_c, is_left, movement, crect);
         } else {
@@ -652,7 +645,7 @@ export class Forest extends Ecs.World {
     /** Removes window from stack, destroying the stack if it was the last window. */
     private remove_from_stack(tabs: Node.TabBars | null, stack: Node.NodeStack, window: Entity, on_last: () => void) {
         if (stack.windows.length === 1) {
-            this.stacks.remove(stack.idx)?.destroy();
+            if (stack.idx !== null) this.stacks.remove(stack.idx)?.destroy();
             on_last();
         } else {
             Node.stack_remove(tabs, stack, window);
