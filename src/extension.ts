@@ -1455,9 +1455,10 @@ export class Ext extends Ecs.System<ExtEvent> {
         };
 
         function mark_for_reassignment(ext: Ext, fork: Ecs.Entity) {
-            for (const win of forest.iter(fork)) {
-                const window = win.lone_window();
-                if (window) window.reassignment = true;
+            for (const leaf of forest.iter(fork)) {
+                if (!leaf.is_leaf()) continue;
+
+                for (const window of leaf.inner.windows) window.reassignment = true;
             }
         }
 

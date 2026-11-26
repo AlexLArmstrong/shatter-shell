@@ -526,61 +526,42 @@ export class GnomeForest {
     }
 
     unstack(fork: Fork, win: MutterWindowHandle, toggled: boolean = false) {
-        const stack_toggle = (fork: Fork, branch: node.Node<node.NodeStack>) => {
-            // If the stack contains 1 item, unstack it
-            const stack = branch.inner;
-            if (stack.windows.length === 1) {
-                if (stack.idx !== null) this.forest.stacks.remove(stack.idx)?.destroy();
-                fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
-                return node.Node.window(win);
-            }
-
-            return null;
-        };
-
         if (toggled && fork.left.is_window(win.entity)) {
-            // Assign left window as stack.
-            fork.left = this.new_stack(fork, win);
+            this.add_tabs(fork, fork.left);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.left.is_in_stack(win.entity)) {
-            const node = stack_toggle(fork, fork.left);
-            if (node) {
-                fork.left = node;
-
-                if (!fork.right) {
-                    this.forest.reassign_to_parent(fork, node);
-                }
+            if (fork.left.inner.windows.length === 1) {
+                this.remove_tabs(fork.left);
+                fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+                if (!fork.right) this.forest.reassign_to_parent(fork, fork.left);
             }
         } else if (toggled && fork.right && fork.right.is_window(win.entity)) {
-            // Assign right window as stack
-            fork.right = this.new_stack(fork, win);
+            this.add_tabs(fork, fork.right);
             fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
         } else if (fork.right && fork.right.is_in_stack(win.entity)) {
-            const node = stack_toggle(fork, fork.right);
-            if (node) fork.right = node;
+            if (fork.right.inner.windows.length === 1) {
+                this.remove_tabs(fork.right);
+                fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
+            }
         }
 
         this.tile(fork, fork.area);
     }
 
-    stack_left(fork: Fork, window: MutterWindowHandle) {
-        fork.left = this.new_stack(fork, window);
-        fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
-    }
+    private add_tabs(fork: Fork, leaf: node.Node<node.NodeStack>) {
+        if (leaf.inner.tabbed) return;
 
-    stack_right(fork: Fork, window: MutterWindowHandle) {
-        fork.right = this.new_stack(fork, window);
-        fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
-    }
-
-    private new_stack(fork: Fork, window: MutterWindowHandle): node.Node<node.NodeStack> {
-        const leaf = node.Node.window(window);
         leaf.inner.tabbed = true;
         leaf.inner.idx = this.forest.stacks.insert(new Stack(this.ext, leaf.inner, fork.workspace));
-        return leaf;
     }
 
-    /** Convers a window into a stack if it was not already stacked */
+    private remove_tabs(leaf: node.Node<node.NodeStack>) {
+        if (leaf.inner.idx !== null) this.forest.stacks.remove(leaf.inner.idx)?.destroy();
+
+        leaf.inner.tabbed = false;
+        leaf.inner.idx = null;
+    }
+
     create_stack(window: MutterWindowHandle) {
         const entity = window.leaf?.parent?.entity ?? null;
         if (!entity) return;
@@ -588,11 +569,15 @@ export class GnomeForest {
         const fork = this.forest.forks.get(entity);
         if (!fork) return;
 
-        if (fork.left.is_window(window.entity)) {
-            this.stack_left(fork, window);
-        } else if (fork.right && fork.right.is_window(window.entity)) {
-            this.stack_right(fork, window);
-        }
+        const leaf = fork.left.is_window(window.entity)
+            ? fork.left
+            : fork.right?.is_window(window.entity)
+              ? fork.right
+              : null;
+        if (!leaf) return;
+
+        this.add_tabs(fork, leaf);
+        fork.measure(this.forest, this.ext, fork.area, this.forest.on_record());
     }
 
     update_stack(stack: node.NodeStack) {
