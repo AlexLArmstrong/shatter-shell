@@ -112,7 +112,7 @@ export class GnomeForest {
             rect.height -= this.ext.sizes.gap_outer * 2;
         }
 
-        const [, fork] = this.forest.add_tree(win, rect.copy(), workspace_id);
+        const fork = this.forest.add_tree(win, rect.copy(), workspace_id).root;
         this.ext.remember_place(win.entity);
         fork.smart_gapped = smart_gaps;
         win.smart_gapped = smart_gaps;
@@ -165,7 +165,7 @@ export class GnomeForest {
         const tree = this.forest.find_tree(id);
 
         if (tree) {
-            const onto = this.forest.largest_window_on(this.ext, tree);
+            const onto = this.forest.largest_window_on(this.ext, tree.root.entity);
             if (onto) {
                 if (this.attach_to_window(onto, win, { auto: 0 })) {
                     return;
@@ -197,7 +197,7 @@ export class GnomeForest {
 
     /** Destroy all widgets owned by this object. Call before dropping. */
     destroy() {
-        for (const fork of this.forest.trees) {
+        for (const { root: fork } of this.forest.trees) {
             for (const node of this.forest.iter(fork.entity)) {
                 if (node.is_leaf()) {
                     for (const window of node.inner.windows) {
@@ -313,7 +313,7 @@ export class GnomeForest {
         const workspace_id: MonitorWorkspaceID = [monitor, workspace];
         const tree = this.forest.find_tree(workspace_id);
         if (tree) {
-            return this.forest.largest_window_on(this.ext, tree);
+            return this.forest.largest_window_on(this.ext, tree.root.entity);
         }
 
         return null;

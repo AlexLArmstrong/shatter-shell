@@ -40,7 +40,6 @@ export class Fork {
     orientation;
 
     orientation_changed: boolean = false;
-    is_root: boolean = false;
 
     smart_gapped: boolean = false;
 
@@ -65,6 +64,10 @@ export class Fork {
         this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orientation;
+    }
+
+    get is_root(): boolean {
+        return this.tree.root === this;
     }
 
     get workspace(): WorkspaceID {

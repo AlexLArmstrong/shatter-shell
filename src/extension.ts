@@ -4,6 +4,7 @@ import type { Entity } from './ecs.js';
 import type { ExtEvent } from './events.js';
 import type { GnomeForest } from './gnome/gnome_forest.js';
 import type { Indicator } from './panel_settings.js';
+import type { Tree } from './tree.js';
 
 import * as Config from './config.js';
 import * as Ecs from './ecs.js';
@@ -11,7 +12,6 @@ import * as Events from './events.js';
 import * as Executor from './executor.js';
 import * as exec from './executor.js';
 import * as Focus from './focus.js';
-import { Fork } from './fork.js';
 import { GnomeGrab } from './gnome/gnome_grab.js';
 import { GnomeSizes } from './gnome/gnome_sizes.js';
 import { GnomeTilingMode } from './gnome/gnome_tiling_mode.js';
@@ -969,7 +969,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         if (this.gnome_forest) {
             // A snapshot, as moving windows may change the forest
             const trees = Array.from(this.gnome_forest.forest.trees);
-            for (const fork of trees) {
+            for (const { root: fork } of trees) {
                 if (condition(fork.workspace)) {
                     // This moves the whole tree, as all of its forks share the tree
                     const value = modify(fork.workspace);
@@ -1420,7 +1420,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         const update_tiling = () => {
             if (!this.gnome_forest) return;
 
-            for (const f of this.gnome_forest.forest.trees) {
+            for (const { root: f } of this.gnome_forest.forest.trees) {
                 const area = this.monitor_work_area(f.monitor);
 
                 f.smart_gapped = false;
@@ -1429,14 +1429,15 @@ export class Ext extends Ecs.System<ExtEvent> {
             }
         };
 
-        type Migration = MonitorMigration<Fork, MonitorID, Mtk.Rectangle>;
+        type Migration = MonitorMigration<Tree, MonitorID, Mtk.Rectangle>;
 
         const apply_migrations = (migrations: Migration[], claimed: Set<MonitorID>) => {
             if (!migrations.length) return;
 
             new exec.OnceExecutor<Migration, Migration[]>(migrations).start(
                 500,
-                ({ tree: fork, monitor, work_area, moved }) => {
+                ({ tree, monitor, work_area, moved }) => {
+                    const fork = tree.root;
                     const workspace = moved
                         ? workspace_on(monitor, claimed, monitor => this.find_unused_workspace(monitor)[0])
                         : fork.workspace;
@@ -1518,7 +1519,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                 for (const migration of migrations) {
                     if (migration.moved) migration.tree.workspace = 0;
-                    mark_for_reassignment(this, migration.tree.entity);
+                    mark_for_reassignment(this, migration.tree.root.entity);
                 }
 
                 apply_migrations(migrations, unchanged_monitors(changes));

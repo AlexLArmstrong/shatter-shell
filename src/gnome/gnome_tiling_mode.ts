@@ -426,11 +426,7 @@ export class GnomeTilingMode {
 
                 if (!tree) return;
 
-                const root_fork = this.ext.gnome_forest.forest.forks.get(tree);
-
-                if (!root_fork) return;
-
-                const toparea = root_fork.area;
+                const toparea = tree.root.area;
 
                 const before = window.frame();
 

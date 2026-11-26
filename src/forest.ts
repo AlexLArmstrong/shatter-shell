@@ -54,7 +54,7 @@ interface Request {
  * arrangement.
  */
 export class Forest extends Ecs.World {
-    private readonly _trees = new Set<Fork.Fork>();
+    private readonly _trees = new Set<Tree>();
 
     /** Stores window positions that have been requested. */
     requested: Map<Entity, Request> = new Map();
@@ -288,7 +288,7 @@ export class Forest extends Ecs.World {
 
     /** Moves every tree `change` pixels in from each edge, except smart-gapped ones */
     move_in(change: number) {
-        for (const fork of this.trees) {
+        for (const { root: fork } of this.trees) {
             if (fork.smart_gapped) continue;
 
             fork.area.x += change;
@@ -300,17 +300,16 @@ export class Forest extends Ecs.World {
 
     /** The trees that hold a single window, with their monitors */
     *lone_trees(): Generator<[Fork.Fork, MonitorID], void> {
-        for (const fork of this.trees) {
+        for (const { root: fork } of this.trees) {
             if (fork.right === null) yield [fork, fork.monitor];
         }
     }
 
-    add_tree(window: MutterWindowHandle, area: Mtk.Rectangle, id: MonitorWorkspaceID): [Entity, Fork.Fork] {
-        const [entity, fork] = this.create_fork(Node.Node.window(window), null, area, new Tree(id[0], id[1]));
-        fork.is_root = true;
-        this._trees.add(fork);
+    add_tree(window: MutterWindowHandle, area: Mtk.Rectangle, id: MonitorWorkspaceID): Tree {
+        const tree = new Tree(id[0], id[1], tree => this.create_fork(Node.Node.window(window), null, area, tree)[1]);
+        this._trees.add(tree);
 
-        return [entity, fork];
+        return tree;
     }
 
     /** Deletes a fork entity from the world, performing any cleanup necessary */
@@ -319,7 +318,7 @@ export class Forest extends Ecs.World {
         if (fork) {
             fork.detached = true;
             fork.leave();
-            this._trees.delete(fork);
+            if (fork.is_root) this._trees.delete(fork.tree);
         }
 
         super.delete_entity(entity);
@@ -390,16 +389,16 @@ export class Forest extends Ecs.World {
         return reflow_fork;
     }
 
-    get trees(): ReadonlySet<Fork.Fork> {
+    get trees(): ReadonlySet<Tree> {
         return this._trees;
     }
 
     /** Finds the tree on a monitor and workspace */
-    find_tree([src_mon, src_work]: MonitorWorkspaceID): Entity | null {
-        for (const fork of this.trees) {
-            const { monitor, workspace } = fork;
+    find_tree([src_mon, src_work]: MonitorWorkspaceID): Tree | null {
+        for (const tree of this.trees) {
+            const { monitor, workspace } = tree;
             if (monitor == src_mon && workspace == src_work) {
-                return fork.entity;
+                return tree;
             }
         }
 
